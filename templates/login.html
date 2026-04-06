@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>RootkitGuard | Access</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { background: radial-gradient(at 0% 0%, #f8fafc 0%, #e2e8f0 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center; font-family: 'sans-serif'; }
+        .glass { background: rgba(255,255,255,0.7); backdrop-filter: blur(15px); border: 1px solid white; border-radius: 2.5rem; }
+        .input-box { background: rgba(255,255,255,0.5); border: 1px solid #e2e8f0; transition: all 0.3s; }
+        .input-box:focus { border-color: #3b82f6; box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1); }
+    </style>
+</head>
+<body>
+    <div class="w-full max-w-md p-10 glass shadow-2xl">
+        <div class="text-center mb-8">
+            <h1 id="title" class="text-3xl font-black text-slate-800">System Login</h1>
+            <p id="desc" class="text-slate-500 mt-2 font-medium">Verify credentials to proceed</p>
+        </div>
+        <form id="auth-form" class="space-y-5">
+            <input type="text" id="user" placeholder="Username" class="w-full p-4 rounded-2xl input-box outline-none" required>
+            <div class="relative">
+                <input type="password" id="pass" placeholder="Password" class="w-full p-4 rounded-2xl input-box outline-none" required>
+                <span class="absolute right-4 top-5 cursor-pointer text-slate-400" onclick="togglePass()">
+                    <i id="eye" class="fas fa-eye"></i>
+                </span>
+            </div>
+
+            <div class="flex items-center px-2">
+                <input type="checkbox" id="remember" class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                <label for="remember" class="ml-2 text-sm font-medium text-slate-600 cursor-pointer">Remember me</label>
+            </div>
+
+            <p id="error-msg" class="hidden text-red-500 text-xs italic px-2"></p>
+            <button type="submit" id="btn" class="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl shadow-lg hover:bg-blue-700 transition-all">Sign In</button>
+        </form>
+        <div class="mt-6 text-center">
+            <button id="toggle" class="text-blue-600 font-bold text-sm hover:underline">New user? Create account</button>
+        </div>
+    </div>
+
+    <script>
+        let isLogin = true;
+        const userInput = document.getElementById('user');
+        const passInput = document.getElementById('pass');
+        const rememberCheck = document.getElementById('remember');
+
+        // 1. عند تحميل الصفحة: تفقد إذا كان هناك بيانات محفوظة
+        window.onload = () => {
+            const savedUser = localStorage.getItem('rootkit_user');
+            const savedPass = localStorage.getItem('rootkit_pass');
+            if (savedUser && savedPass) {
+                userInput.value = savedUser;
+                passInput.value = savedPass;
+                rememberCheck.checked = true;
+            }
+        };
+
+        function togglePass() {
+            const p = document.getElementById('pass');
+            const e = document.getElementById('eye');
+            p.type = p.type === 'password' ? 'text' : 'password';
+            e.className = p.type === 'password' ? 'fas fa-eye' : 'fas fa-eye-slash';
+        }
+
+        document.getElementById('toggle').onclick = () => {
+            isLogin = !isLogin;
+            document.getElementById('title').innerText = isLogin ? "System Login" : "Join Network";
+            document.getElementById('btn').innerText = isLogin ? "Sign In" : "Register";
+            document.getElementById('toggle').innerText = isLogin ? "New user? Create account" : "Back to Login";
+            // إخفاء خيار Remember me عند التسجيل الجديد (اختياري)
+            rememberCheck.parentElement.style.display = isLogin ? 'flex' : 'none';
+        };
+
+        document.getElementById('auth-form').onsubmit = async (e) => {
+            e.preventDefault();
+            const username = userInput.value;
+            const password = passInput.value;
+
+            const res = await fetch(isLogin ? '/login' : '/register', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username, password})
+            });
+            
+            const data = await res.json();
+
+            if (res.ok) {
+                // 2. إذا نجح الدخول وكان خيار "Remember me" مفعل، احفظ البيانات
+                if (rememberCheck.checked) {
+                    localStorage.setItem('rootkit_user', username);
+                    localStorage.setItem('rootkit_pass', password);
+                } else {
+                    // إذا لم يكن مفعل، امسح أي بيانات قديمة
+                    localStorage.removeItem('rootkit_user');
+                    localStorage.removeItem('rootkit_pass');
+                }
+                window.location.reload();
+            } else {
+                const err = document.getElementById('error-msg');
+                err.innerText = data.message;
+                err.classList.remove('hidden');
+            }
+        };
+    </script>
+</body>
+</html>

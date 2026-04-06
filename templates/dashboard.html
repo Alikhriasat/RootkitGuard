@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>RootkitGuard | Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { background: #f8fafc; font-family: 'sans-serif'; }
+        .glass-panel { background: white; border-radius: 2rem; border: 1px solid #f1f5f9; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
+    </style>
+</head>
+<body class="p-6">
+    <nav class="max-w-6xl mx-auto flex justify-between items-center mb-10 bg-white p-5 rounded-3xl shadow-sm">
+        <div class="flex items-center gap-2">
+            <i class="fas fa-shield-halved text-blue-600 text-2xl"></i>
+            <span class="text-xl font-black">Rootkit<span class="text-blue-600">Guard</span></span>
+        </div>
+        <div class="flex items-center gap-4">
+            <span class="font-bold text-slate-600">Welcome, {{ username }}</span>
+            <a href="/logout" class="bg-red-50 text-red-500 px-4 py-2 rounded-xl font-bold hover:bg-red-100"><i class="fas fa-power-off"></i></a>
+        </div>
+    </nav>
+
+    <main class="max-w-6xl mx-auto space-y-8">
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-8">
+            <div class="md:col-span-5 glass-panel p-8">
+                <h3 class="text-lg font-bold mb-6">Analyze System Log</h3>
+                <div id="drop-zone" class="border-2 border-dashed border-blue-100 rounded-3xl p-10 text-center cursor-pointer hover:bg-blue-50 transition">
+                    <input type="file" id="file-input" class="hidden" accept=".json">
+                    <i class="fas fa-cloud-upload-alt text-4xl text-blue-400 mb-4"></i>
+                    <p id="file-name" class="text-slate-500 font-medium italic">Drop JSON log here</p>
+                </div>
+                <button id="scan-btn" disabled class="w-full mt-8 bg-blue-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-blue-100 disabled:opacity-30">Execute AI Scan</button>
+            </div>
+
+            <div class="md:col-span-7 glass-panel p-8 flex flex-col items-center justify-center min-h-[350px]">
+                <div id="res-box" class="hidden text-center scale-110 transition-all">
+                    <div id="res-icon" class="text-6xl mb-4"></div>
+                    <h2 id="res-status" class="text-3xl font-black mb-2"></h2>
+                    <p id="res-conf" class="text-slate-400 font-bold"></p>
+                </div>
+                <p id="placeholder" class="text-slate-300 italic"><i class="fas fa-microscope mr-2"></i>Awaiting input for analysis...</p>
+            </div>
+        </div>
+
+        <div class="glass-panel p-8">
+            <h3 class="text-lg font-bold mb-6 flex items-center gap-2"><i class="fas fa-history text-blue-600"></i> Scan History Log</h3>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left">
+                    <thead>
+                        <tr class="text-slate-400 text-sm border-b">
+                            <th class="pb-4 px-4">Timestamp</th>
+                            <th class="pb-4 px-4">Filename</th>
+                            <th class="pb-4 px-4">Security Status</th>
+                            <th class="pb-4 px-4">Confidence</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for scan in history %}
+                        <tr class="border-b last:border-0 hover:bg-slate-50 transition">
+                            <td class="py-4 px-4 text-slate-400 text-xs">{{ scan.date.strftime('%Y-%m-%d %H:%M') }}</td>
+                            <td class="py-4 px-4 font-bold text-slate-700">{{ scan.filename }}</td>
+                            <td class="py-4 px-4">
+                                <span class="px-3 py-1 rounded-full text-xs font-black {{ 'bg-red-100 text-red-600' if 'Rootkit' in scan.result else 'bg-green-100 text-green-600' }}">
+                                    {{ scan.result }}
+                                </span>
+                            </td>
+                            <td class="py-4 px-4 font-bold text-blue-600">{{ scan.confidence }}%</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const fileInput = document.getElementById('file-input');
+        const scanBtn = document.getElementById('scan-btn');
+        document.getElementById('drop-zone').onclick = () => fileInput.click();
+
+        fileInput.onchange = (e) => {
+            if(e.target.files[0]) {
+                document.getElementById('file-name').innerText = e.target.files[0].name;
+                scanBtn.disabled = false;
+            }
+        };
+
+        scanBtn.onclick = async () => {
+            scanBtn.innerText = "Analyzing...";
+            const response = await fetch('/analyze', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ filename: fileInput.files[0].name })
+            });
+            const data = await response.json();
+            document.getElementById('placeholder').classList.add('hidden');
+            const resBox = document.getElementById('res-box');
+            resBox.classList.remove('hidden');
+            document.getElementById('res-status').innerText = data.status;
+            document.getElementById('res-status').className = `text-3xl font-black mb-2 ${data.status.includes('Rootkit') ? 'text-red-600' : 'text-emerald-600'}`;
+            document.getElementById('res-icon').innerHTML = data.status.includes('Rootkit') ? '<i class="fas fa-biohazard text-red-600"></i>' : '<i class="fas fa-check-circle text-emerald-600"></i>';
+            document.getElementById('res-conf').innerText = `Analysis Confidence: ${data.confidence}%`;
+            scanBtn.innerText = "Execute AI Scan";
+            setTimeout(() => location.reload(), 2000); // تحديث الصفحة لرؤية العملية في السجل
+        };
+    </script>
+</body>
+</html>

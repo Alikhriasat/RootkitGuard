@@ -9,10 +9,14 @@ import re
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "rootkit_guard_secure_key_2026")
 
-# إعداد قاعدة البيانات السحابية (Supabase)
+# إعداد قاعدة البيانات السحابية (Supabase) مع معالجة الرابط بشكل آمن لـ Render
 DATABASE_URL = os.environ.get("DATABASE_URL")
-if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+if DATABASE_URL:
+    if DATABASE_URL.startswith("postgres://"):
+        DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+    # إضافة خيار تعطيل الـ SSL الصارم إذا لم يكن مهيأ بالسيرفر لمنع الـ Crash
+    if "?" not in DATABASE_URL:
+        DATABASE_URL += "?sslmode=disable"
 
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL or 'sqlite:///users.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -90,7 +94,7 @@ def login():
                 # زيادة عداد الفشل عند كتابة كلمة مرور خاطئة لاسم مستخدم موجود
                 user.failed_attempts += 1
                 if user.failed_attempts >= 3:
-                    # قفل الحساب لمدة 5 دقائق (يمكنك تعديل المدة كما تحب)
+                    # قفل الحساب لمدة 5 دقائق
                     user.lockout_until = datetime.utcnow() + timedelta(minutes=5)
                     msg = "Too many failed attempts. Account locked for 5 minutes."
                 else:

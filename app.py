@@ -103,7 +103,6 @@ def login():
                 db.session.commit()
                 return jsonify({'status': 'fail', 'message': msg}) if is_ajax else render_template('login.html', error=msg)
         else:
-            # إذا كان اسم المستخدم غير مسجل أصلاً في النظام
             msg = "Username does not exist!"
             return jsonify({'status': 'fail', 'message': msg}) if is_ajax else render_template('login.html', error=msg)
 

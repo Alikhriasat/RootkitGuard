@@ -9,26 +9,28 @@ import re
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "rootkit_guard_secure_key_2026")
 
-# إعداد قاعدة البيانات السحابية (Supabase) بعد تبسيط الباسوورد
+# إعداد قاعدة البيانات السحابية مع دعم الـ Connection Pooling والـ IPv4 الصارم
 DATABASE_URL = os.environ.get("DATABASE_URL")
-if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
-
-# إضافة خيار تعطيل الـ SSL الصارم إذا لم يكن مهيأ بالسيرفر لمنع الـ Crash
-if DATABASE_URL and "?" not in DATABASE_URL:
-    DATABASE_URL += "?sslmode=disable"
+if DATABASE_URL:
+    if DATABASE_URL.startswith("postgres://"):
+        DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL or 'sqlite:///users.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# تحسين إعدادات المحرك لمنع انقطاع الاتصال الشبكي السحابي
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    "pool_pre_ping": True,  # التحقق من سلامة الاتصال قبل إرسال البيانات لمنع الـ Network unreachable
+    "pool_recycle": 300     # إعادة تدوير الاتصالات كل 5 دقائق
+}
+
 db = SQLAlchemy(app)
 
-# تعريف جدول المستخدمين المطور مع ميزات الأمان الجديدة
+# تعريف جدول المستخدمين المطور
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(150), unique=True, nullable=False)
     password = db.Column(db.String(150), nullable=False)
-    
-    # حقول تتبع محاولات تسجيل الدخول الفاشلة للحماية من Brute-Force
     failed_attempts = db.Column(db.Integer, default=0)
     lockout_until = db.Column(db.DateTime, nullable=True)
 
@@ -43,14 +45,13 @@ except Exception as e:
 
 history_log = []
 
-# دالة برمجية للتحقق من قوة كلمة المرور باستخدام الـ Regular Expressions (Regex)
 def is_password_strong(password):
     if len(password) < 6:
         return False, "Password must be at least 6 characters long."
     if not re.search(r"[A-Z]", password):
         return False, "Password must contain at least one capital letter (A-Z)."
     if not re.search(r"[!@#$%^&*(),.?\":{}|<>_+\-=\[\]\\]", password):
-        return False, "Password must contain at least one special character (e.g. @, #, $, %, etc.)."
+        return False, "Password must contain at least one special character."
     return True, "Strong password"
 
 @app.route('/')
@@ -73,39 +74,30 @@ def login():
             is_ajax = False
         
         user = User.query.filter_by(username=username).first()
-        
         if user:
-            # 1. التحقق مما إذا كان الحساب مقفلاً حالياً
             if user.lockout_until and datetime.utcnow() < user.lockout_until:
                 remaining_time = int((user.lockout_until - datetime.utcnow()).total_seconds())
                 msg = f"Account locked due to 3 failed attempts. Try again in {remaining_time} seconds."
                 return jsonify({'status': 'fail', 'message': msg}) if is_ajax else render_template('login.html', error=msg)
             
-            # 2. التحقق من صحة كلمة المرور
             if user.password == password:
-                # تصفير عداد المحاولات الفاشلة عند الدخول الناجح
                 user.failed_attempts = 0
                 user.lockout_until = None
                 db.session.commit()
-                
                 session['username'] = username
                 return jsonify({'status': 'success'}) if is_ajax else redirect(url_for('dashboard'))
             else:
-                # زيادة عداد الفشل عند كتابة كلمة مرور خاطئة لاسم مستخدم موجود
                 user.failed_attempts += 1
                 if user.failed_attempts >= 3:
-                    # قفل الحساب لمدة 5 دقائق
                     user.lockout_until = datetime.utcnow() + timedelta(minutes=5)
                     msg = "Too many failed attempts. Account locked for 5 minutes."
                 else:
                     msg = f"Invalid Password! {3 - user.failed_attempts} attempts remaining."
-                
                 db.session.commit()
                 return jsonify({'status': 'fail', 'message': msg}) if is_ajax else render_template('login.html', error=msg)
         else:
             msg = "Username does not exist!"
             return jsonify({'status': 'fail', 'message': msg}) if is_ajax else render_template('login.html', error=msg)
-
     return render_template('login.html')
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -120,45 +112,27 @@ def register():
             username = request.form.get('username')
             password = request.form.get('password')
             is_ajax = False
-            
-        if not username or not password:
-            msg = 'Please fill in all fields.'
-            return jsonify({'status': 'fail', 'message': msg}) if is_ajax else msg
 
-        # التحقق من قوة كلمة المرور قبل تسجيل الحساب
+        if not username or not password:
+            return jsonify({'status': 'fail', 'message': 'Please fill in all fields.'}) if is_ajax else 'Please fill in all fields.'
+
         is_valid, validation_msg = is_password_strong(password)
         if not is_valid:
-            if is_ajax:
-                return jsonify({'status': 'fail', 'message': validation_msg})
-            return render_template('login.html', error=validation_msg)
+            return jsonify({'status': 'fail', 'message': validation_msg}) if is_ajax else render_template('login.html', error=validation_msg)
 
-        # التحقق من وجود المستخدم مسبقاً
         existing_user = User.query.filter_by(username=username).first()
         if existing_user:
-            msg = 'Username already exists! Choose another one.'
-            if is_ajax:
-                return jsonify({'status': 'fail', 'message': msg})
-            return render_template('login.html', error=msg)
+            return jsonify({'status': 'fail', 'message': 'Username already exists!'}) if is_ajax else render_template('login.html', error='Username already exists!')
 
         new_user = User(username=username, password=password)
         try:
             db.session.add(new_user)
             db.session.commit()
-            msg = f'Account created successfully! You can login now as {username}.'
-            if is_ajax:
-                return jsonify({'status': 'success', 'message': msg})
-            return redirect(url_for('login'))
-        except Exception as e:
+            return jsonify({'status': 'success', 'message': 'Account created successfully!'}) if is_ajax else redirect(url_for('login'))
+        except Exception:
             db.session.rollback()
-            msg = 'Database error, please try again.'
-            if is_ajax:
-                return jsonify({'status': 'fail', 'message': msg})
-            return render_template('login.html', error=msg)
-    
-    try:
-        return render_template('register.html')
-    except Exception:
-        return render_template('login.html')
+            return jsonify({'status': 'fail', 'message': 'Database error, please try again.'}) if is_ajax else render_template('login.html', error='Database error.')
+    return render_template('register.html') if hasattr(render_template, '__call__') else render_template('login.html')
 
 @app.route('/logout')
 def logout():

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>System Login - RootkitGuard</title>
+    <title>Authentication - RootkitGuard</title>
     <style>
         body { 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
@@ -16,44 +16,63 @@
         }
         .card { 
             background: white; 
-            padding: 40px 30px; 
+            padding: 35px 30px; 
             border-radius: 16px; 
             box-shadow: 0 10px 25px rgba(0,0,0,0.05); 
             width: 380px; 
             text-align: center; 
         }
-        h2 { 
-            color: #1e293b; 
-            font-size: 1.8rem;
-            margin-bottom: 5px; 
+        .tabs {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 25px;
+            border-bottom: 2px solid #e2e8f0;
         }
-        p.subtitle { 
-            color: #64748b; 
-            font-size: 0.95rem; 
-            margin-bottom: 30px; 
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            font-weight: bold;
+            color: #64748b;
+            transition: all 0.2s ease;
+        }
+        .tab.active {
+            color: #1e293b;
+            border-bottom: 3px solid #3b82f6;
         }
         .form-group { 
-            margin-bottom: 20px; 
+            margin-bottom: 18px; 
             text-align: left; 
         }
         input { 
             width: 100%; 
-            padding: 14px; 
+            padding: 13px; 
             border: 1px solid #cbd5e1; 
             border-radius: 10px; 
             box-sizing: border-box; 
-            font-size: 1rem; 
+            font-size: 0.95rem; 
             background-color: #f8fafc;
         }
         input:focus { 
             outline: none; 
             border-color: #3b82f6; 
             background-color: #fff;
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+        .show-pass-container {
+            display: flex;
+            align-items: center;
+            font-size: 0.85rem;
+            color: #64748b;
+            margin-top: 5px;
+            cursor: pointer;
+        }
+        .show-pass-container input {
+            width: auto;
+            margin-right: 6px;
+            cursor: pointer;
         }
         button { 
             width: 100%; 
-            padding: 14px; 
+            padding: 13px; 
             background: #1e293b; 
             color: white; 
             border: none; 
@@ -62,55 +81,88 @@
             cursor: pointer; 
             font-weight: bold; 
             margin-top: 10px; 
-            transition: background 0.2s ease;
         }
         button:hover { 
             background: #334155; 
         }
-        /* صندوق عرض الرسائل تحت الباسوورد مباشرة */
-        #error-message-box { 
+        #message-box { 
             color: #ef4444; 
             font-size: 0.85rem; 
             margin-top: 8px; 
             font-weight: 600; 
             text-align: left; 
-            padding: 4px 5px; 
-            line-height: 1.4;
+            min-height: 20px;
         }
     </style>
 </head>
 <body>
 
 <div class="card">
-    <h2>System Login</h2>
-    <p class="subtitle">Verify credentials to proceed</p>
+    <div class="tabs">
+        <div class="tab active" id="loginTab" onclick="switchTab('login')">Sign In</div>
+        <div class="tab" id="registerTab" onclick="switchTab('register')">Sign Up</div>
+    </div>
     
-    <form id="loginForm">
+    <form id="authForm">
         <div class="form-group">
             <input type="text" id="username" placeholder="Username" required>
         </div>
         <div class="form-group">
             <input type="password" id="password" placeholder="Password" required>
             
-            <div id="error-message-box"></div>
+            <label class="show-pass-container">
+                <input type="checkbox" id="showPasswordToggle" onclick="togglePasswordVisibility()"> Show Password
+            </label>
+            
+            <div id="message-box"></div>
         </div>
         
-        <button type="submit">Login</button>
+        <button type="submit" id="submitBtn">Sign In</button>
     </form>
 </div>
 
 <script>
-document.getElementById('loginForm').addEventListener('submit', function(e) {
+let currentMode = 'login'; // الوضع الافتراضي هو تسجيل الدخول
+
+function switchTab(mode) {
+    currentMode = mode;
+    document.getElementById('message-box').innerText = "";
+    
+    if (mode === 'login') {
+        document.getElementById('loginTab').classList.add('active');
+        document.getElementById('registerTab').classList.remove('active');
+        document.getElementById('submitBtn').innerText = "Sign In";
+    } else {
+        document.getElementById('registerTab').classList.add('active');
+        document.getElementById('loginTab').classList.remove('active');
+        document.getElementById('submitBtn').innerText = "Sign Up";
+    }
+}
+
+// ميزة إظهار وإخفاء الباسوورد (Show Password)
+function togglePasswordVisibility() {
+    const passwordInput = document.getElementById('password');
+    if (passwordInput.type === "password") {
+        passwordInput.type = "text";
+    } else {
+        passwordInput.type = "password";
+    }
+}
+
+document.getElementById('authForm').addEventListener('submit', function(e) {
     e.preventDefault();
     
     const username = document.getElementById('username').value;
     const password = document.getElementById('password').value;
-    const errorMessageBox = document.getElementById('error-message-box');
+    const messageBox = document.getElementById('message-box');
+    
+    messageBox.innerText = ""; 
+    messageBox.style.color = "#ef4444"; // افتراضي أحمر للأخطاء
 
-    // تصفية النصوص السابقة قبل الإرسال الجديد
-    errorMessageBox.innerText = ""; 
+    // تحديد المسار بناءً على التبويب المختار
+    const targetUrl = currentMode === 'login' ? '/login' : '/register';
 
-    fetch('/login', {
+    fetch(targetUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: username, password: password })
@@ -118,15 +170,19 @@ document.getElementById('loginForm').addEventListener('submit', function(e) {
     .then(res => res.json())
     .then(data => {
         if (data.status === 'success') {
-            // الدخول مباشرة للـ Dashboard
-            window.location.href = '/dashboard';
+            if (currentMode === 'register') {
+                messageBox.style.color = "#22c55e"; // أخضر للنجاح
+                messageBox.innerText = data.message + " Redirecting...";
+                setTimeout(() => { window.location.href = '/dashboard'; }, 1500);
+            } else {
+                window.location.href = '/dashboard';
+            }
         } else {
-            // طباعة الرسالة المستلمة فوريّاً قدام المستخدم تحت الصندوق
-            errorMessageBox.innerText = data.message;
+            messageBox.innerText = data.message;
         }
     })
     .catch(err => {
-        errorMessageBox.innerText = "Connection error. Please try again.";
+        messageBox.innerText = "Connection error. Please try again.";
     });
 });
 </script>

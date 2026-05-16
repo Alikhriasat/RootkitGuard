@@ -9,11 +9,13 @@ import re
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "rootkit_guard_secure_key_2026")
 
+# استخدام SQLite المحلية لثبات واستقرار 100%
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
+# تعريف جدول المستخدمين
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(150), unique=True, nullable=False)
@@ -21,6 +23,7 @@ class User(db.Model):
     failed_attempts = db.Column(db.Integer, default=0)
     lockout_until = db.Column(db.DateTime, nullable=True)
 
+# تحميل موديلات الذكاء الاصطناعي لفحص الـ Rootkit
 try:
     model = joblib.load('syscall_model.pkl')
     vectorizer = joblib.load('vectorizer.pkl')
@@ -71,7 +74,7 @@ def login():
                 db.session.commit()
                 return jsonify({'status': 'fail', 'message': msg})
         else:
-            return jsonify({'status': 'fail', 'message': 'Username does not exist. Please Sign Up first!'})
+            return jsonify({'status': 'fail', 'message': 'Username does not exist. Please switch to Sign Up to register!'})
 
     return render_template('login.html')
 
@@ -88,11 +91,11 @@ def register():
     if len(password) < 6:
         return jsonify({'status': 'fail', 'message': 'Password must be at least 6 characters long.'})
     if not re.search(r"[A-Z]", password):
-        return jsonify({'status': 'fail', 'message': 'Password needs at least one uppercase letter (A-Z).'})
+        return jsonify({'status': 'fail', 'message': 'Password must contain at least one uppercase letter (A-Z).'})
     if not re.search(r"[a-z]", password):
-        return jsonify({'status': 'fail', 'message': 'Password needs at least one lowercase letter (a-z).'})
+        return jsonify({'status': 'fail', 'message': 'Password must contain at least one lowercase letter (a-z).'})
     if not re.search(r"\d", password):
-        return jsonify({'status': 'fail', 'message': 'Password needs at least one number (0-9).'})
+        return jsonify({'status': 'fail', 'message': 'Password must contain at least one number (0-9).'})
 
     existing_user = User.query.filter_by(username=username).first()
     if existing_user:
@@ -102,7 +105,7 @@ def register():
     try:
         db.session.add(new_user)
         db.session.commit()
-        session['username'] = username  # تسجيل دخول فوري بعد إنشاء الحساب
+        session['username'] = username  # تسجيل دخول فوري بعد الإنشاء بنجاح
         return jsonify({'status': 'success', 'message': 'Account created successfully!'})
     except Exception:
         db.session.rollback()

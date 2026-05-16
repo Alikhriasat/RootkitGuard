@@ -4,28 +4,26 @@ import joblib
 import json
 from datetime import datetime, timedelta
 import os
+import re  # مكتبة الـ Regex لفحص شروط الباسوورد بدقة
 
 app = Flask(__name__)
-# مفتاح الأمان للجلسات (Sessions)
 app.secret_key = os.environ.get("SECRET_KEY", "rootkit_guard_secure_key_2026")
 
-# الاعتماد على قاعدة البيانات المحلية SQLite كلياً لضمان الاستقرار التام في الوقت الحالي
+# الاعتماد على SQLite المحلية كلياً لضمان الاستقرار الفوري والثبات
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
-# تعريف جدول المستخدمين الأساسي
+# تعريف جدول المستخدمين في قاعدة البيانات
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(150), unique=True, nullable=False)
-    password = db.Column(db.String(150), nullable=False)
-    
-    # حقول الحماية من الهجمات التكرارية Brute-Force
+    password = db.Column(db.String(150), nullable=False)  # تخزين الباسوورد الأصلية للمطابقة لاحقاً
     failed_attempts = db.Column(db.Integer, default=0)
     lockout_until = db.Column(db.DateTime, nullable=True)
 
-# تحميل موديلات الذكاء الاصطناعي لفحص ملفات الـ Syscall
+# تحميل موديلات الذكاء الاصطناعي لفحص الـ Rootkit
 try:
     model = joblib.load('syscall_model.pkl')
     vectorizer = joblib.load('vectorizer.pkl')
@@ -36,11 +34,19 @@ except Exception as e:
 
 history_log = []
 
-# دالة التحقق المعدلة والبسيطة (تطلب فقط 6 خانات أو أكثر دون شروط الرموز المعقدة)
+# دالة التحقق الصارمة والقوية من كلمة المرور
 def is_password_strong(password):
     if len(password) < 6:
         return False, "Password must be at least 6 characters long."
-    return True, "Valid password"
+    if not re.search(r"[A-Z]", password):
+        return False, "Password must contain at least one uppercase letter (A-Z)."
+    if not re.search(r"[a-z]", password):
+        return False, "Password must contain at least one lowercase letter (a-z)."
+    if not re.search(r"\d", password):
+        return False, "Password must contain at least one number (0-9)."
+    if not re.search(r"[!@#$%^&*(),.?\":{}|<>_+\-=\[\]\\]", password):
+        return False, "Password must contain at least one special character (e.g., !, @, #, $, %, etc.)."
+    return True, "Strong password"
 
 @app.route('/')
 def home():
@@ -63,13 +69,13 @@ def login():
         
         user = User.query.filter_by(username=username).first()
         if user:
-            # التحقق مما إذا كان الحساب مقفلاً مؤقتاً
+            # التحقق من قفل الحساب
             if user.lockout_until and datetime.utcnow() < user.lockout_until:
                 remaining_time = int((user.lockout_until - datetime.utcnow()).total_seconds())
-                msg = f"Account locked. Try again in {remaining_time} seconds."
+                msg = f"Account locked due to 3 failed attempts. Try again in {remaining_time} seconds."
                 return jsonify({'status': 'fail', 'message': msg}) if is_ajax else render_template('login.html', error=msg)
             
-            # التحقق من كلمة المرور
+            # مطابقة كلمة المرور المدخلة مع نفس الباسوورد التي سجل بها المستخدم أول مرة
             if user.password == password:
                 user.failed_attempts = 0
                 user.lockout_until = None
@@ -77,6 +83,7 @@ def login():
                 session['username'] = username
                 return jsonify({'status': 'success'}) if is_ajax else redirect(url_for('dashboard'))
             else:
+                # حساب المحاولات الفاشلة وقفل الحساب إذا وصلت لـ 3 محاولات
                 user.failed_attempts += 1
                 if user.failed_attempts >= 3:
                     user.lockout_until = datetime.utcnow() + timedelta(minutes=5)
@@ -104,20 +111,18 @@ def register():
             is_ajax = False
 
         if not username or not password:
-            msg = 'Please fill in all fields.'
-            return jsonify({'status': 'fail', 'message': msg}) if is_ajax else msg
+            return jsonify({'status': 'fail', 'message': 'Please fill in all fields.'}) if is_ajax else 'Please fill in all fields.'
 
-        # فحص طول كلمة المرور المبسط
+        # فحص الشروط الصارمة لكلمة المرور؛ إذا لم تطابق الشروط يرفض التسجيل فوراً ويظهر السبب
         is_valid, validation_msg = is_password_strong(password)
         if not is_valid:
             return jsonify({'status': 'fail', 'message': validation_msg}) if is_ajax else render_template('login.html', error=validation_msg)
 
-        # التحقق من عدم تكرار اسم المستخدم
         existing_user = User.query.filter_by(username=username).first()
         if existing_user:
-            msg = 'Username already exists!'
-            return jsonify({'status': 'fail', 'message': msg}) if is_ajax else render_template('login.html', error=msg)
+            return jsonify({'status': 'fail', 'message': 'Username already exists!'}) if is_ajax else render_template('login.html', error='Username already exists!')
 
+        # حفظ الحساب الجديد بالباسوورد القوية المستوفية للشروط
         new_user = User(username=username, password=password)
         try:
             db.session.add(new_user)
@@ -126,11 +131,7 @@ def register():
         except Exception:
             db.session.rollback()
             return jsonify({'status': 'fail', 'message': 'Database error, please try again.'}) if is_ajax else render_template('login.html', error='Database error.')
-    
-    try:
-        return render_template('register.html')
-    except Exception:
-        return render_template('login.html')
+    return render_template('register.html') if hasattr(render_template, '__call__') else render_template('login.html')
 
 @app.route('/logout')
 def logout():

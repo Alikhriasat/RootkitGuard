@@ -12,7 +12,7 @@ app.secret_key = os.environ.get("SECRET_KEY", "rootkit_guard_secure_key_2026")
 try:
     model = joblib.load('syscall_model.pkl')
     vectorizer = joblib.load('vectorizer.pkl')
-    print("AI Engine Status: ONLINE & LOADED SUCCESSFULY")
+    print("AI Engine Status: ONLINE & LOADED SUCCESSFULLY")
 except Exception as e:
     print(f"CRITICAL ERROR: Could not load AI models: {e}")
     model = None
@@ -21,7 +21,7 @@ except Exception as e:
 # سجل الفحوصات المؤقت في الذاكرة
 history_log = []
 
-# مستخدم افتراضي لتجربة النظام (يمكنك تعديله أو ربطه بقاعدة بياناتك لاحقاً)
+# مستخدم افتراضي لتجربة النظام
 DEFAULT_USER = "Ali"
 DEFAULT_PASS = "123456"
 
@@ -34,16 +34,43 @@ def home():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        data = request.get_json()
-        username = data.get('username')
-        password = data.get('password')
+        # التحقق إذا كانت البيانات مبعوثة كـ JSON أو Form عادي لحل مشكلة التوافق
+        if request.is_json:
+            data = request.get_json()
+            username = data.get('username')
+            password = data.get('password')
+            is_ajax = True
+        else:
+            username = request.form.get('username')
+            password = request.form.get('password')
+            is_ajax = False
         
+        # فحص الحساب
         if username == DEFAULT_USER and password == DEFAULT_PASS:
             session['username'] = username
-            return jsonify({'status': 'success'})
+            if is_ajax:
+                return jsonify({'status': 'success'})
+            return redirect(url_for('dashboard'))
         else:
-            return jsonify({'status': 'fail', 'message': 'Invalid Security Credentials!'})
+            if is_ajax:
+                return jsonify({'status': 'fail', 'message': 'Invalid Security Credentials!'})
+            return render_template('login.html', error='Invalid Security Credentials!')
+
     return render_template('login.html')
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        # بما أننا نستخدم مستخدم افتراضي حالياً، سنقوم باعتماد التسجيل وتحويله لصفحة الدخول فوراً
+        if request.is_json:
+            return jsonify({'status': 'success', 'message': 'Account created! Please login as Ali.'})
+        return redirect(url_for('login'))
+    
+    # إذا طلب الصفحة عبر الـ GET، نقوم بعرض نفس صفحة الدخول أو صفحة التسجيل إن وجدت
+    try:
+        return render_template('register.html')
+    except Exception:
+        return render_template('login.html')
 
 @app.route('/logout')
 def logout():
@@ -63,6 +90,9 @@ def analyze():
         return jsonify({'status': 'Error', 'message': 'AI Engine is offline. Check model files.'}), 500
 
     data = request.get_json()
+    if not data:
+        return jsonify({'status': 'Error', 'message': 'No data provided.'}), 400
+
     filename = data.get('filename')
     file_content = data.get('file_content')
 
@@ -83,7 +113,7 @@ def analyze():
             probabilities = model.predict_proba(processed_features)[0]
             confidence = int(max(probabilities) * 100)
         else:
-            confidence = 96  # قيمة الافتراضية عالية إذا كان الموديل قطعي (مثل Decision Tree)
+            confidence = 96  # قيمة افتراضية عالية إذا كان الموديل قطعي
 
         # 6. تحديد الحالة بناءً على مخرجات الموديل (1 = مصاب، 0 = سليم)
         if prediction == 1 or str(prediction).lower() == 'rootkit':
@@ -93,7 +123,7 @@ def analyze():
 
         # 7. إضافة الفحص إلى السجل ليظهر في الـ Dashboard
         new_scan = {
-            'date': datetime.now(),
+            'date': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             'filename': filename,
             'result': status,
             'confidence': confidence

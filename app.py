@@ -1,12 +1,24 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
+from flask_sqlalchemy import SQLAlchemy
 import joblib
 import json
 from datetime import datetime
 import os
 
 app = Flask(__name__)
-# مفتاح أمان لتفعيل الـ session (تأمين تسجيل الدخول)
+# مفتاح أمان لتفعيل الـ session
 app.secret_key = os.environ.get("SECRET_KEY", "rootkit_guard_secure_key_2026")
+
+# إعداد قاعدة بيانات SQLite محلية مدمجة تلقائياً
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
+
+# تعريف جدول المستخدمين في قاعدة البيانات
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(150), unique=True, nullable=False)
+    password = db.Column(db.String(150), nullable=False)
 
 # 1. تحميل الموديل والـ Vectorizer أول ما يشتغل السيرفر
 try:
@@ -21,10 +33,6 @@ except Exception as e:
 # سجل الفحوصات المؤقت في الذاكرة
 history_log = []
 
-# مستخدم افتراضي لتجربة النظام
-DEFAULT_USER = "Ali"
-DEFAULT_PASS = "123456"
-
 @app.route('/')
 def home():
     if 'username' in session:
@@ -34,7 +42,6 @@ def home():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        # التحقق إذا كانت البيانات مبعوثة كـ JSON أو Form عادي لحل مشكلة التوافق
         if request.is_json:
             data = request.get_json()
             username = data.get('username')
@@ -45,28 +52,63 @@ def login():
             password = request.form.get('password')
             is_ajax = False
         
-        # فحص الحساب
-        if username == DEFAULT_USER and password == DEFAULT_PASS:
+        # البحث عن المستخدم في قاعدة البيانات والتأكد من كلمته السرية
+        user = User.query.filter_by(username=username).first()
+        
+        if user and user.password == password:
             session['username'] = username
             if is_ajax:
                 return jsonify({'status': 'success'})
             return redirect(url_for('dashboard'))
         else:
+            msg = 'Invalid Username or Password!'
             if is_ajax:
-                return jsonify({'status': 'fail', 'message': 'Invalid Security Credentials!'})
-            return render_template('login.html', error='Invalid Security Credentials!')
+                return jsonify({'status': 'fail', 'message': msg})
+            return render_template('login.html', error=msg)
 
     return render_template('login.html')
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
-        # بما أننا نستخدم مستخدم افتراضي حالياً، سنقوم باعتماد التسجيل وتحويله لصفحة الدخول فوراً
         if request.is_json:
-            return jsonify({'status': 'success', 'message': 'Account created! Please login as Ali.'})
-        return redirect(url_for('login'))
+            data = request.get_json()
+            username = data.get('username')
+            password = data.get('password')
+            is_ajax = True
+        else:
+            username = request.form.get('username')
+            password = request.form.get('password')
+            is_ajax = False
+            
+        if not username or not password:
+            msg = 'Please fill in all fields.'
+            return jsonify({'status': 'fail', 'message': msg}) if is_ajax else msg
+
+        # التحقق إذا كان اسم المستخدم محجوزاً مسبقاً
+        existing_user = User.query.filter_by(username=username).first()
+        if existing_user:
+            msg = 'Username already exists! Choose another one.'
+            if is_ajax:
+                return jsonify({'status': 'fail', 'message': msg})
+            return render_template('login.html', error=msg)
+
+        # إضافة المستخدم الجديد لقاعدة البيانات
+        new_user = User(username=username, password=password)
+        try:
+            db.session.add(new_user)
+            db.session.commit()
+            msg = f'Account created successfully! You can login now as {username}.'
+            if is_ajax:
+                return jsonify({'status': 'success', 'message': msg})
+            return redirect(url_for('login'))
+        except Exception as e:
+            db.session.rollback()
+            msg = 'Database error, please try again.'
+            if is_ajax:
+                return jsonify({'status': 'fail', 'message': msg})
+            return render_template('login.html', error=msg)
     
-    # إذا طلب الصفحة عبر الـ GET، نقوم بعرض نفس صفحة الدخول أو صفحة التسجيل إن وجدت
     try:
         return render_template('register.html')
     except Exception:
@@ -85,7 +127,6 @@ def dashboard():
 
 @app.route('/analyze', methods=['POST'])
 def analyze():
-    # التأكد من جهوزية محرك الذكاء الاصطناعي
     if model is None or vectorizer is None:
         return jsonify({'status': 'Error', 'message': 'AI Engine is offline. Check model files.'}), 500
 
@@ -96,32 +137,25 @@ def analyze():
     filename = data.get('filename')
     file_content = data.get('file_content')
 
-    # 2. فحص إذا كان محتوى ملف الـ JSON فارغاً
     if not file_content or file_content == {}:
         return jsonify({'status': 'Empty File', 'message': 'The JSON file contains no data/features.'}), 400
 
     try:
-        # 3. معالجة البيانات (Feature Extraction) وتحويل الـ JSON لنص للـ Vectorizer
         json_str = json.dumps(file_content)
         processed_features = vectorizer.transform([json_str])
-        
-        # 4. التوقع الفعلي بواسطة موديل الآلة (Machine Learning Prediction)
         prediction = model.predict(processed_features)[0]
         
-        # 5. حساب نسبة التأكيد (Confidence)
         if hasattr(model, "predict_proba"):
             probabilities = model.predict_proba(processed_features)[0]
             confidence = int(max(probabilities) * 100)
         else:
-            confidence = 96  # قيمة افتراضية عالية إذا كان الموديل قطعي
+            confidence = 96
 
-        # 6. تحديد الحالة بناءً على مخرجات الموديل (1 = مصاب، 0 = سليم)
         if prediction == 1 or str(prediction).lower() == 'rootkit':
             status = "Rootkit Detected"
         else:
             status = "System Clean"
 
-        # 7. إضافة الفحص إلى السجل ليظهر في الـ Dashboard
         new_scan = {
             'date': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             'filename': filename,
@@ -137,6 +171,10 @@ def analyze():
 
     except Exception as e:
         return jsonify({'status': 'Error', 'message': f'Analysis failed during ML processing: {str(e)}'}), 500
+
+# إنشاء قاعدة البيانات والجداول تلقائياً عند تشغيل السيرفر لأول مرة
+with app.app_context():
+    db.create_all()
 
 if __name__ == '__main__':
     app.run(debug=True)

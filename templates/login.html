@@ -1,122 +1,134 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="utf-8">
-    <title>RootkitGuard | Access</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Login - RootkitGuard</title>
     <style>
-        body { background: radial-gradient(at 0% 0%, #f8fafc 0%, #e2e8f0 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center; font-family: 'sans-serif'; }
-        .glass { background: rgba(255,255,255,0.7); backdrop-filter: blur(15px); border: 1px solid white; border-radius: 2.5rem; }
-        .input-box { background: rgba(255,255,255,0.5); border: 1px solid #e2e8f0; transition: all 0.3s; }
-        .input-box:focus { border-color: #3b82f6; box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1); }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background-color: #f4f6f9; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            height: 100vh; 
+            margin: 0; 
+        }
+        .card { 
+            background: white; 
+            padding: 40px 30px; 
+            border-radius: 16px; 
+            box-shadow: 0 10px 25px rgba(0,0,0,0.05); 
+            width: 380px; 
+            text-align: center; 
+        }
+        h2 { 
+            color: #1e293b; 
+            font-size: 1.8rem;
+            margin-bottom: 5px; 
+        }
+        p.subtitle { 
+            color: #64748b; 
+            font-size: 0.95rem; 
+            margin-bottom: 30px; 
+        }
+        .form-group { 
+            margin-bottom: 20px; 
+            text-align: left; 
+        }
+        input { 
+            width: 100%; 
+            padding: 14px; 
+            border: 1px solid #cbd5e1; 
+            border-radius: 10px; 
+            box-sizing: border-box; 
+            font-size: 1rem; 
+            background-color: #f8fafc;
+        }
+        input:focus { 
+            outline: none; 
+            border-color: #3b82f6; 
+            background-color: #fff;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+        button { 
+            width: 100%; 
+            padding: 14px; 
+            background: #1e293b; 
+            color: white; 
+            border: none; 
+            border-radius: 10px; 
+            font-size: 1rem; 
+            cursor: pointer; 
+            font-weight: bold; 
+            margin-top: 10px; 
+            transition: background 0.2s ease;
+        }
+        button:hover { 
+            background: #334155; 
+        }
+        /* صندوق عرض الرسائل تحت الباسوورد مباشرة */
+        #error-message-box { 
+            color: #ef4444; 
+            font-size: 0.85rem; 
+            margin-top: 8px; 
+            font-weight: 600; 
+            text-align: left; 
+            padding: 4px 5px; 
+            line-height: 1.4;
+        }
     </style>
 </head>
 <body>
-    <div class="w-full max-w-md p-10 glass shadow-2xl">
-        <div class="text-center mb-8">
-            <h1 id="title" class="text-3xl font-black text-slate-800">System Login</h1>
-            <p id="desc" class="text-slate-500 mt-2 font-medium">Verify credentials to proceed</p>
+
+<div class="card">
+    <h2>System Login</h2>
+    <p class="subtitle">Verify credentials to proceed</p>
+    
+    <form id="loginForm">
+        <div class="form-group">
+            <input type="text" id="username" placeholder="Username" required>
         </div>
-        <form id="auth-form" class="space-y-5">
-            <input type="text" id="user" placeholder="Username" class="w-full p-4 rounded-2xl input-box outline-none" required>
-            <div class="relative">
-                <input type="password" id="pass" placeholder="Password" class="w-full p-4 rounded-2xl input-box outline-none" required>
-                <span class="absolute right-4 top-5 cursor-pointer text-slate-400" onclick="togglePass()">
-                    <i id="eye" class="fas fa-eye"></i>
-                </span>
-            </div>
-
-            <div class="flex items-center px-2">
-                <input type="checkbox" id="remember" class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
-                <label for="remember" class="ml-2 text-sm font-medium text-slate-600 cursor-pointer">Remember me</label>
-            </div>
-
-            <p id="error-msg" class="hidden text-xs italic px-2 font-medium"></p>
+        <div class="form-group">
+            <input type="password" id="password" placeholder="Password" required>
             
-            <button type="submit" id="btn" class="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl shadow-lg hover:bg-blue-700 transition-all">Sign In</button>
-        </form>
-        <div class="mt-6 text-center">
-            <button id="toggle" class="text-blue-600 font-bold text-sm hover:underline">New user? Create account</button>
+            <div id="error-message-box"></div>
         </div>
-    </div>
+        
+        <button type="submit">Login</button>
+    </form>
+</div>
 
-    <script>
-        let isLogin = true;
-        const userInput = document.getElementById('user');
-        const passInput = document.getElementById('pass');
-        const rememberCheck = document.getElementById('remember');
-        const errDisplay = document.getElementById('error-msg');
+<script>
+document.getElementById('loginForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const username = document.getElementById('username').value;
+    const password = document.getElementById('password').value;
+    const errorMessageBox = document.getElementById('error-message-box');
 
-        // 1. عند تحميل الصفحة: تفقد إذا كان هناك بيانات محفوظة
-        window.onload = () => {
-            const savedUser = localStorage.getItem('rootkit_user');
-            const savedPass = localStorage.getItem('rootkit_pass');
-            if (savedUser && savedPass) {
-                userInput.value = savedUser;
-                passInput.value = savedPass;
-                rememberCheck.checked = true;
-            }
-        };
+    // تصفية النصوص السابقة قبل الإرسال الجديد
+    errorMessageBox.innerText = ""; 
 
-        function togglePass() {
-            const p = document.getElementById('pass');
-            const e = document.getElementById('eye');
-            p.type = p.type === 'password' ? 'text' : 'password';
-            e.className = p.type === 'password' ? 'fas fa-eye' : 'fas fa-eye-slash';
+    fetch('/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: username, password: password })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.status === 'success') {
+            // الدخول مباشرة للـ Dashboard
+            window.location.href = '/dashboard';
+        } else {
+            // طباعة الرسالة المستلمة فوريّاً قدام المستخدم تحت الصندوق
+            errorMessageBox.innerText = data.message;
         }
-
-        document.getElementById('toggle').onclick = () => {
-            isLogin = !isLogin;
-            document.getElementById('title').innerText = isLogin ? "System Login" : "Join Network";
-            document.getElementById('btn').innerText = isLogin ? "Sign In" : "Register";
-            document.getElementById('toggle').innerText = isLogin ? "New user? Create account" : "Back to Login";
-            rememberCheck.parentElement.style.display = isLogin ? 'flex' : 'none';
-            errDisplay.classList.add('hidden');
-        };
-
-        document.getElementById('auth-form').onsubmit = async (e) => {
-            e.preventDefault();
-            const username = userInput.value;
-            const password = passInput.value;
-
-            // إخفاء التنبيهات السابقة عند الضغط
-            errDisplay.classList.add('hidden');
-
-            const res = await fetch(isLogin ? '/login' : '/register', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({username, password})
-            });
-            
-            const data = await res.json();
-
-            if (res.ok) {
-                if (isLogin) {
-                    // 2. إذا نجح الدخول وكان خيار "Remember me" مفعل، احفظ البيانات
-                    if (rememberCheck.checked) {
-                        localStorage.setItem('rootkit_user', username);
-                        localStorage.setItem('rootkit_pass', password);
-                    } else {
-                        localStorage.removeItem('rootkit_user');
-                        localStorage.removeItem('rootkit_pass');
-                    }
-                    
-                    // التوجيه فوراً لصفحة لوحة التحكم بدلاً من عمل reload للموقع
-                    window.location.href = '/dashboard';
-                } else {
-                    // إذا كان في صفحة الـ Register ونجح، يظهره تنبيه بالنجاح ويرجعه لصفحة الـ Login
-                    errDisplay.innerText = data.message || "Account created successfully! Please Login.";
-                    errDisplay.className = "text-green-500 text-xs italic px-2 font-medium block";
-                    document.getElementById('toggle').click(); // رجعه لصفحة الـ Login تلقائياً
-                    passInput.value = "";
-                }
-            } else {
-                // عرض رسالة الخطأ باللون الأحمر
-                errDisplay.innerText = data.message || "An error occurred!";
-                errDisplay.className = "text-red-500 text-xs italic px-2 font-medium block";
-            }
-        };
-    </script>
+    })
+    .catch(err => {
+        errorMessageBox.innerText = "Connection error. Please try again.";
+    });
+});
+</script>
 </body>
 </html>

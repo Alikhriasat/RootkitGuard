@@ -32,7 +32,8 @@
                 <label for="remember" class="ml-2 text-sm font-medium text-slate-600 cursor-pointer">Remember me</label>
             </div>
 
-            <p id="error-msg" class="hidden text-red-500 text-xs italic px-2"></p>
+            <p id="error-msg" class="hidden text-xs italic px-2 font-medium"></p>
+            
             <button type="submit" id="btn" class="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl shadow-lg hover:bg-blue-700 transition-all">Sign In</button>
         </form>
         <div class="mt-6 text-center">
@@ -45,6 +46,7 @@
         const userInput = document.getElementById('user');
         const passInput = document.getElementById('pass');
         const rememberCheck = document.getElementById('remember');
+        const errDisplay = document.getElementById('error-msg');
 
         // 1. عند تحميل الصفحة: تفقد إذا كان هناك بيانات محفوظة
         window.onload = () => {
@@ -69,14 +71,17 @@
             document.getElementById('title').innerText = isLogin ? "System Login" : "Join Network";
             document.getElementById('btn').innerText = isLogin ? "Sign In" : "Register";
             document.getElementById('toggle').innerText = isLogin ? "New user? Create account" : "Back to Login";
-            // إخفاء خيار Remember me عند التسجيل الجديد (اختياري)
             rememberCheck.parentElement.style.display = isLogin ? 'flex' : 'none';
+            errDisplay.classList.add('hidden');
         };
 
         document.getElementById('auth-form').onsubmit = async (e) => {
             e.preventDefault();
             const username = userInput.value;
             const password = passInput.value;
+
+            // إخفاء التنبيهات السابقة عند الضغط
+            errDisplay.classList.add('hidden');
 
             const res = await fetch(isLogin ? '/login' : '/register', {
                 method: 'POST',
@@ -87,20 +92,29 @@
             const data = await res.json();
 
             if (res.ok) {
-                // 2. إذا نجح الدخول وكان خيار "Remember me" مفعل، احفظ البيانات
-                if (rememberCheck.checked) {
-                    localStorage.setItem('rootkit_user', username);
-                    localStorage.setItem('rootkit_pass', password);
+                if (isLogin) {
+                    // 2. إذا نجح الدخول وكان خيار "Remember me" مفعل، احفظ البيانات
+                    if (rememberCheck.checked) {
+                        localStorage.setItem('rootkit_user', username);
+                        localStorage.setItem('rootkit_pass', password);
+                    } else {
+                        localStorage.removeItem('rootkit_user');
+                        localStorage.removeItem('rootkit_pass');
+                    }
+                    
+                    // التوجيه فوراً لصفحة لوحة التحكم بدلاً من عمل reload للموقع
+                    window.location.href = '/dashboard';
                 } else {
-                    // إذا لم يكن مفعل، امسح أي بيانات قديمة
-                    localStorage.removeItem('rootkit_user');
-                    localStorage.removeItem('rootkit_pass');
+                    // إذا كان في صفحة الـ Register ونجح، يظهره تنبيه بالنجاح ويرجعه لصفحة الـ Login
+                    errDisplay.innerText = data.message || "Account created successfully! Please Login.";
+                    errDisplay.className = "text-green-500 text-xs italic px-2 font-medium block";
+                    document.getElementById('toggle').click(); // رجعه لصفحة الـ Login تلقائياً
+                    passInput.value = "";
                 }
-                window.location.reload();
             } else {
-                const err = document.getElementById('error-msg');
-                err.innerText = data.message;
-                err.classList.remove('hidden');
+                // عرض رسالة الخطأ باللون الأحمر
+                errDisplay.innerText = data.message || "An error occurred!";
+                errDisplay.className = "text-red-500 text-xs italic px-2 font-medium block";
             }
         };
     </script>

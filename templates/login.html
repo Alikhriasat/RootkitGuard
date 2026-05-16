@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Authentication - RootkitGuard</title>
+    <title>System Login</title>
     <style>
         body { 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            background-color: #f4f6f9; 
+            background-color: #f8fafc; 
             display: flex; 
             justify-content: center; 
             align-items: center; 
@@ -16,91 +16,119 @@
         }
         .card { 
             background: white; 
-            padding: 35px 30px; 
-            border-radius: 16px; 
-            box-shadow: 0 10px 25px rgba(0,0,0,0.05); 
+            padding: 40px 35px; 
+            border-radius: 20px; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.03); 
             width: 380px; 
             text-align: center; 
         }
-        .tabs {
-            display: flex;
-            justify-content: space-around;
-            margin-bottom: 25px;
-            border-bottom: 2px solid #e2e8f0;
+        h2 { 
+            color: #1e293b; 
+            font-size: 2rem;
+            margin: 0 0 8px 0; 
         }
-        .tab {
-            padding: 10px 20px;
+        p.subtitle { 
+            color: #64748b; 
+            font-size: 0.95rem; 
+            margin: 0 0 30px 0; 
+        }
+        .auth-modes {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 25px;
+        }
+        .mode-btn {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #94a3b8;
             cursor: pointer;
-            font-weight: bold;
-            color: #64748b;
+            padding: 5px 10px;
             transition: all 0.2s ease;
         }
-        .tab.active {
+        .mode-btn.active {
             color: #1e293b;
-            border-bottom: 3px solid #3b82f6;
+            border-bottom: 2px solid #1e293b;
         }
         .form-group { 
-            margin-bottom: 18px; 
+            margin-bottom: 20px; 
+            position: relative;
             text-align: left; 
         }
-        input { 
+        input[type="text"], input[type="password"] { 
             width: 100%; 
-            padding: 13px; 
-            border: 1px solid #cbd5e1; 
-            border-radius: 10px; 
+            padding: 16px; 
+            border: 1px solid #e2e8f0; 
+            border-radius: 14px; 
             box-sizing: border-box; 
-            font-size: 0.95rem; 
-            background-color: #f8fafc;
+            font-size: 1rem; 
+            color: #334155;
+            background-color: #fff;
+            transition: all 0.2s ease;
         }
         input:focus { 
             outline: none; 
-            border-color: #3b82f6; 
-            background-color: #fff;
+            border-color: #cbd5e1; 
         }
-        .show-pass-container {
+        /* أيقونة العين داخل حقل الباسوورد */
+        .password-toggle {
+            position: absolute;
+            right: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            cursor: pointer;
+            color: #94a3b8;
+            user-select: none;
+            font-size: 1.2rem;
+        }
+        .options-row {
             display: flex;
             align-items: center;
-            font-size: 0.85rem;
+            justify-content: flex-start;
+            margin-top: 12px;
             color: #64748b;
-            margin-top: 5px;
+            font-size: 0.9rem;
+        }
+        .options-row input {
+            margin-right: 8px;
             cursor: pointer;
         }
-        .show-pass-container input {
-            width: auto;
-            margin-right: 6px;
-            cursor: pointer;
-        }
-        button { 
+        button.submit-btn { 
             width: 100%; 
-            padding: 13px; 
+            padding: 16px; 
             background: #1e293b; 
             color: white; 
             border: none; 
-            border-radius: 10px; 
+            border-radius: 14px; 
             font-size: 1rem; 
             cursor: pointer; 
             font-weight: bold; 
-            margin-top: 10px; 
+            margin-top: 25px; 
+            transition: background 0.2s ease;
         }
-        button:hover { 
+        button.submit-btn:hover { 
             background: #334155; 
         }
-        #message-box { 
+        #error-message-box { 
             color: #ef4444; 
             font-size: 0.85rem; 
-            margin-top: 8px; 
+            margin-top: 10px; 
             font-weight: 600; 
             text-align: left; 
             min-height: 20px;
+            line-height: 1.4;
         }
     </style>
 </head>
 <body>
 
 <div class="card">
-    <div class="tabs">
-        <div class="tab active" id="loginTab" onclick="switchTab('login')">Sign In</div>
-        <div class="tab" id="registerTab" onclick="switchTab('register')">Sign Up</div>
+    <h2 id="mainTitle">System Login</h2>
+    <p class="subtitle" id="mainSubtitle">Verify credentials to proceed</p>
+    
+    <div class="auth-modes">
+        <span class="mode-btn active" id="loginMode" onclick="setMode('login')">Sign In</span>
+        <span class="mode-btn" id="registerMode" onclick="setMode('register')">Sign Up</span>
     </div>
     
     <form id="authForm">
@@ -109,43 +137,53 @@
         </div>
         <div class="form-group">
             <input type="password" id="password" placeholder="Password" required>
-            
-            <label class="show-pass-container">
-                <input type="checkbox" id="showPasswordToggle" onclick="togglePasswordVisibility()"> Show Password
-            </label>
-            
-            <div id="message-box"></div>
+            <span class="password-toggle" onclick="togglePassword()">👁️</span>
         </div>
         
-        <button type="submit" id="submitBtn">Sign In</button>
+        <div class="options-row">
+            <label style="display: flex; align-items: center; cursor: pointer;">
+                <input type="checkbox" id="rememberMe"> Remember me
+            </label>
+        </div>
+        
+        <div id="error-message-box"></div>
+        
+        <button type="submit" class="submit-btn" id="actionBtn">Sign In</button>
     </form>
 </div>
 
 <script>
-let currentMode = 'login'; // الوضع الافتراضي هو تسجيل الدخول
+let authMode = 'login';
 
-function switchTab(mode) {
-    currentMode = mode;
-    document.getElementById('message-box').innerText = "";
+function setMode(mode) {
+    authMode = mode;
+    document.getElementById('error-message-box').innerText = "";
     
     if (mode === 'login') {
-        document.getElementById('loginTab').classList.add('active');
-        document.getElementById('registerTab').classList.remove('active');
-        document.getElementById('submitBtn').innerText = "Sign In";
+        document.getElementById('loginMode').classList.add('active');
+        document.getElementById('registerMode').classList.remove('active');
+        document.getElementById('mainTitle').innerText = "System Login";
+        document.getElementById('mainSubtitle').innerText = "Verify credentials to proceed";
+        document.getElementById('actionBtn').innerText = "Sign In";
     } else {
-        document.getElementById('registerTab').classList.add('active');
-        document.getElementById('loginTab').classList.remove('active');
-        document.getElementById('submitBtn').innerText = "Sign Up";
+        document.getElementById('registerMode').classList.add('active');
+        document.getElementById('loginMode').classList.remove('active');
+        document.getElementById('mainTitle').innerText = "Create Account";
+        document.getElementById('mainSubtitle').innerText = "Register your new system credentials";
+        document.getElementById('actionBtn').innerText = "Sign Up";
     }
 }
 
-// ميزة إظهار وإخفاء الباسوورد (Show Password)
-function togglePasswordVisibility() {
-    const passwordInput = document.getElementById('password');
-    if (passwordInput.type === "password") {
-        passwordInput.type = "text";
+// دالة إظهار وإخفاء كلمة المرور عند النقر على العين
+function togglePassword() {
+    const passwordField = document.getElementById('password');
+    const toggleIcon = document.querySelector('.password-toggle');
+    if (passwordField.type === 'password') {
+        passwordField.type = 'text';
+        toggleIcon.innerText = '🙈'; // تتغير الأيقونة عند الإظهار
     } else {
-        passwordInput.type = "password";
+        passwordField.type = 'password';
+        toggleIcon.innerText = '👁️';
     }
 }
 
@@ -154,15 +192,15 @@ document.getElementById('authForm').addEventListener('submit', function(e) {
     
     const username = document.getElementById('username').value;
     const password = document.getElementById('password').value;
-    const messageBox = document.getElementById('message-box');
+    const errorBox = document.getElementById('error-message-box');
     
-    messageBox.innerText = ""; 
-    messageBox.style.color = "#ef4444"; // افتراضي أحمر للأخطاء
+    errorBox.innerText = "";
+    errorBox.style.color = "#ef4444";
 
-    // تحديد المسار بناءً على التبويب المختار
-    const targetUrl = currentMode === 'login' ? '/login' : '/register';
+    // تحديد مسار الإرسال حسب الوضع الحالي لقفل الحساب أو إنشاء حساب جديد
+    const endpoint = authMode === 'login' ? '/login' : '/register';
 
-    fetch(targetUrl, {
+    fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: username, password: password })
@@ -170,19 +208,20 @@ document.getElementById('authForm').addEventListener('submit', function(e) {
     .then(res => res.json())
     .then(data => {
         if (data.status === 'success') {
-            if (currentMode === 'register') {
-                messageBox.style.color = "#22c55e"; // أخضر للنجاح
-                messageBox.innerText = data.message + " Redirecting...";
+            if (authMode === 'register') {
+                errorBox.style.color = "#22c55e"; // لون أخضر عند نجاح التسجيل
+                errorBox.innerText = data.message + " Redirecting...";
                 setTimeout(() => { window.location.href = '/dashboard'; }, 1500);
             } else {
                 window.location.href = '/dashboard';
             }
         } else {
-            messageBox.innerText = data.message;
+            // إظهار الرسالة بدقة للمستخدم (سواء الباسوورد غلط، شروط ناقصة، أو عداد الثواني)
+            errorBox.innerText = data.message;
         }
     })
     .catch(err => {
-        messageBox.innerText = "Connection error. Please try again.";
+        errorBox.innerText = "Server connection issue. Please check again.";
     });
 });
 </script>

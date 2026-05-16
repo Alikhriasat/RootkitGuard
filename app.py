@@ -9,14 +9,14 @@ import re
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "rootkit_guard_secure_key_2026")
 
-# إعداد قاعدة البيانات السحابية (Supabase) مع معالجة الرابط بشكل آمن لـ Render
+# إعداد قاعدة البيانات السحابية (Supabase) بعد تبسيط الباسوورد
 DATABASE_URL = os.environ.get("DATABASE_URL")
-if DATABASE_URL:
-    if DATABASE_URL.startswith("postgres://"):
-        DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
-    # إضافة خيار تعطيل الـ SSL الصارم إذا لم يكن مهيأ بالسيرفر لمنع الـ Crash
-    if "?" not in DATABASE_URL:
-        DATABASE_URL += "?sslmode=disable"
+if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+# إضافة خيار تعطيل الـ SSL الصارم إذا لم يكن مهيأ بالسيرفر لمنع الـ Crash
+if DATABASE_URL and "?" not in DATABASE_URL:
+    DATABASE_URL += "?sslmode=disable"
 
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL or 'sqlite:///users.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False

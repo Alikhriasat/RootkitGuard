@@ -23,21 +23,39 @@ class User(db.Model):
     failed_attempts = db.Column(db.Integer, default=0)
     lockout_until = db.Column(db.DateTime, nullable=True)
 
-# تحميل موديلات الذكاء الاصطناعي مع حماية كاملة ضد الانهيار
+# تحميل موديلات الذكاء الاصطناعي مع حماية كاملة وطباعة تقرير للـ Logs
 model = None
 vectorizer = None
 
+print("=== STARTING AI MODEL CHECK ===")
 try:
-    if os.path.exists('syscall_model.pkl') and os.path.exists('vectorizer.pkl'):
+    print(f"Current Working Directory: {os.getcwd()}")
+    print(f"Files in directory: {os.listdir('.')}")
+
+    if os.path.exists('syscall_model.pkl'):
+        print("✔ Found 'syscall_model.pkl' on server. Trying to load...")
         model = joblib.load('syscall_model.pkl')
         print(model)
+        print("✔ 'syscall_model.pkl' LOADED SUCCESSFULLY!")
+    else:
+        print("❌ ERROR: 'syscall_model.pkl' is MISSING from server directory!")
+
+    if os.path.exists('vectorizer.pkl'):
+        print("✔ Found 'vectorizer.pkl' on server. Trying to load...")
         vectorizer = joblib.load('vectorizer.pkl')
         print(vectorizer)
-        print("AI Engine Status: ONLINE")
+        print("✔ 'vectorizer.pkl' LOADED SUCCESSFULLY!")
     else:
-        print("ML Models not found, running on Rule-Based Backup Engine.")
+        print("❌ ERROR: 'vectorizer.pkl' is MISSING from server directory!")
+
+    if model and vectorizer:
+        print("🚀 AI ENGINE STATUS: ONLINE")
+    else:
+        print("⚠️ WARNING: One or both ML files failed to initialize.")
+
 except Exception as e:
     print(f"Error loading ML models: {e}")
+print("=== END OF AI MODEL CHECK ===")
 
 history_log = []
 
@@ -141,7 +159,6 @@ def analyze():
         return jsonify({'status': 'Empty File'}), 400
 
     try:
-        # [تأمين وحماية كاملة] إذا كان موديل الذكاء الاصطناعي محمل ومستقر على السيرفر
         if model is not None and vectorizer is not None:
             json_str = json.dumps(file_content)
             processed_features = vectorizer.transform([json_str])
@@ -149,10 +166,7 @@ def analyze():
             confidence = int(max(model.predict_proba(processed_features)[0]) * 100) if hasattr(model, "predict_proba") else 96
             status = "Rootkit Detected" if (prediction == 1 or str(prediction).lower() == 'rootkit') else "System Clean"
         else:
-            # [محرك احتياطي ذكي وفوري] في حال حدوث أي مشكلة بملف الموديل على Render لتجنب الـ Error 500 تماماً
-            # يتم فحص محتوى الـ System Calls برمجياً بشكل ذكي
             content_str = str(file_content).lower()
-            # فحص وجود استدعاءات مشبوهة أو تكرار حاد يدل على الـ Rootkit
             if 'sys_clone' in content_str or 'kill' in content_str or 'rootkit' in content_str or len(content_str) > 5000:
                 status = "Rootkit Detected"
                 confidence = 94
@@ -160,8 +174,9 @@ def analyze():
                 status = "System Clean"
                 confidence = 98
 
+        # التعديل الإصلاحي: إرسال التاريخ ككائن datetime حقيقي ليتوافق مع الـ HTML تماماً
         new_scan = {
-            'date': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            'date': datetime.now(),
             'filename': filename,
             'result': status,
             'confidence': confidence
@@ -170,9 +185,8 @@ def analyze():
         return jsonify({'status': status, 'confidence': confidence})
 
     except Exception as e:
-        # حماية قصوى: حتى لو حدث أي خطأ غير متوقع داخل دالة التحليل، نقوم بإنقاذ الطلب وإرجاع النتيجة بثبات
         new_scan = {
-            'date': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            'date': datetime.now(),
             'filename': filename,
             'result': "System Clean",
             'confidence': 95

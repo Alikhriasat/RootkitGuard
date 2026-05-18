@@ -57,7 +57,6 @@ except Exception as e:
     print(f"Error loading ML models: {e}")
 print("=== END OF AI MODEL CHECK ===")
 
-history_log = []
 
 @app.route('/')
 def home():
@@ -145,10 +144,27 @@ def logout():
 def dashboard():
     if 'username' not in session:
         return redirect(url_for('login'))
-    return render_template('dashboard.html', username=session['username'], history=history_log)
+    
+    # التعديل: جلب الـ history الخاص بهذا المستخدم فقط من السيشين، إذا لم يكن موجوداً ننشئ قائمة فارغة
+    user_history = session.get('user_history', [])
+    
+    # تحويل نصوص التواريخ الراجع من السيشين لكائنات datetime لكي لا تضرب واجهة الـ HTML
+    formatted_history = []
+    for scan in user_history:
+        try:
+            scan_copy = scan.copy()
+            scan_copy['date'] = datetime.strptime(scan['date'], "%Y-%m-%d %H:%M:%S")
+            formatted_history.append(scan_copy)
+        except Exception:
+            formatted_history.append(scan)
+
+    return render_template('dashboard.html', username=session['username'], history=formatted_history)
 
 @app.route('/analyze', methods=['POST'])
 def analyze():
+    if 'username' not in session:
+        return jsonify({'status': 'Error', 'message': 'Unauthorized'}), 401
+
     data = request.get_json()
     if not data:
         return jsonify({'status': 'Error', 'message': 'No data received.'}), 400
@@ -174,24 +190,35 @@ def analyze():
                 status = "System Clean"
                 confidence = 98
 
-        # التعديل الإصلاحي: إرسال التاريخ ككائن datetime حقيقي ليتوافق مع الـ HTML تماماً
+        # حفظ الفحص الحالي في السيشين الخاصة بالمستخدم الحالي فقط
+        if 'user_history' not in session:
+            session['user_history'] = []
+            
+        # نأخذ نسخة من التاريخ الحالي كـ String للحفظ داخل الـ Session بأمان
+        current_history = session['user_history']
         new_scan = {
-            'date': datetime.now(),
+            'date': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             'filename': filename,
             'result': status,
             'confidence': confidence
         }
-        history_log.insert(0, new_scan)
+        current_history.insert(0, new_scan)
+        session['user_history'] = current_history # تحديث السيشين
+        
         return jsonify({'status': status, 'confidence': confidence})
 
     except Exception as e:
+        if 'user_history' not in session:
+            session['user_history'] = []
+        current_history = session['user_history']
         new_scan = {
-            'date': datetime.now(),
+            'date': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             'filename': filename,
             'result': "System Clean",
             'confidence': 95
         }
-        history_log.insert(0, new_scan)
+        current_history.insert(0, new_scan)
+        session['user_history'] = current_history
         return jsonify({'status': "System Clean", 'confidence': 95})
 
 with app.app_context():

@@ -30,7 +30,9 @@ vectorizer = None
 try:
     if os.path.exists('syscall_model.pkl') and os.path.exists('vectorizer.pkl'):
         model = joblib.load('syscall_model.pkl')
+        print(model)
         vectorizer = joblib.load('vectorizer.pkl')
+        print(vectorizer)
         print("AI Engine Status: ONLINE")
     else:
         print("ML Models not found, running on Rule-Based Backup Engine.")

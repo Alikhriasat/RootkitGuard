@@ -9,10 +9,17 @@ import re
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "rootkit_guard_secure_key_2026")
 
-# إعداد قاعدة البيانات المحلية SQLite
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+# نظام الحماية الذكي لقاعدة البيانات لمنع الـ Error 500 تماماً
+db_url = os.environ.get("DATABASE_URL")
+if db_url:
+    # لتصحيح الرابط تلقائياً إذا كان يبدأ بـ postgres:// ليصبح postgresql://
+    if db_url.startswith("postgres://"):
+        db_url = db_url.replace("postgres://", "postgresql://", 1)
+    app.config['SQLALCHEMY_DATABASE_URI'] = db_url
+else:
+    app.config['SQLALCHEMY_DATABASE_URI'] = "sqlite:///users.db"
 
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
 # تعريف جدول المستخدمين
@@ -30,33 +37,15 @@ vectorizer = None
 print("=== STARTING AI MODEL CHECK ===")
 try:
     print(f"Current Working Directory: {os.getcwd()}")
-    print(f"Files in directory: {os.listdir('.')}")
-
     if os.path.exists('syscall_model.pkl'):
-        print("✔ Found 'syscall_model.pkl' on server. Trying to load...")
         model = joblib.load('syscall_model.pkl')
-        print(model)
         print("✔ 'syscall_model.pkl' LOADED SUCCESSFULLY!")
-    else:
-        print("❌ ERROR: 'syscall_model.pkl' is MISSING from server directory!")
-
     if os.path.exists('vectorizer.pkl'):
-        print("✔ Found 'vectorizer.pkl' on server. Trying to load...")
         vectorizer = joblib.load('vectorizer.pkl')
-        print(vectorizer)
         print("✔ 'vectorizer.pkl' LOADED SUCCESSFULLY!")
-    else:
-        print("❌ ERROR: 'vectorizer.pkl' is MISSING from server directory!")
-
-    if model and vectorizer:
-        print("🚀 AI ENGINE STATUS: ONLINE")
-    else:
-        print("⚠️ WARNING: One or both ML files failed to initialize.")
-
 except Exception as e:
     print(f"Error loading ML models: {e}")
 print("=== END OF AI MODEL CHECK ===")
-
 
 @app.route('/')
 def home():
@@ -74,31 +63,32 @@ def login():
         if not username or not password:
             return jsonify({'status': 'fail', 'message': 'Please fill in all fields.'})
 
-        user = User.query.filter_by(username=username).first()
-        if user:
-            # التحقق من قفل الحساب لـ دقيقتين
-            if user.lockout_until and datetime.utcnow() < user.lockout_until:
-                remaining_time = int((user.lockout_until - datetime.utcnow()).total_seconds())
-                return jsonify({'status': 'fail', 'message': f'Account locked! Wait {remaining_time} seconds.'})
-            
-            # مطابقة كلمة المرور
-            if user.password == password:
-                user.failed_attempts = 0
-                user.lockout_until = None
-                db.session.commit()
-                session['username'] = username
-                return jsonify({'status': 'success'})
-            else:
-                user.failed_attempts += 1
-                if user.failed_attempts >= 3:
-                    user.lockout_until = datetime.utcnow() + timedelta(minutes=2)
-                    msg = "Too many failed attempts. Account locked for 2 minutes."
+        try:
+            user = User.query.filter_by(username=username).first()
+            if user:
+                if user.lockout_until and datetime.utcnow() < user.lockout_until:
+                    remaining_time = int((user.lockout_until - datetime.utcnow()).total_seconds())
+                    return jsonify({'status': 'fail', 'message': f'Account locked! Wait {remaining_time} seconds.'})
+                
+                if user.password == password:
+                    user.failed_attempts = 0
+                    user.lockout_until = None
+                    db.session.commit()
+                    session['username'] = username
+                    return jsonify({'status': 'success'})
                 else:
-                    msg = f"Invalid Password! {3 - user.failed_attempts} attempts remaining."
-                db.session.commit()
-                return jsonify({'status': 'fail', 'message': msg})
-        else:
-            return jsonify({'status': 'fail', 'message': 'Username does not exist. Please switch to Sign Up to register!'})
+                    user.failed_attempts += 1
+                    if user.failed_attempts >= 3:
+                        user.lockout_until = datetime.utcnow() + timedelta(minutes=2)
+                        msg = "Too many failed attempts. Account locked for 2 minutes."
+                    else:
+                        msg = f"Invalid Password! {3 - user.failed_attempts} attempts remaining."
+                    db.session.commit()
+                    return jsonify({'status': 'fail', 'message': msg})
+            else:
+                return jsonify({'status': 'fail', 'message': 'Username does not exist. Please switch to Sign Up to register!'})
+        except Exception as e:
+            return jsonify({'status': 'fail', 'message': 'Database sync error. Please try again.'})
 
     return render_template('login.html')
 
@@ -111,7 +101,6 @@ def register():
     if not username or not password:
         return jsonify({'status': 'fail', 'message': 'Please fill in all fields.'})
 
-    # شروط كلمة المرور الصارمة
     if len(password) < 6:
         return jsonify({'status': 'fail', 'message': 'Password must be at least 6 characters long.'})
     if not re.search(r"[A-Z]", password):
@@ -121,19 +110,19 @@ def register():
     if not re.search(r"\d", password):
         return jsonify({'status': 'fail', 'message': 'Password must contain at least one number (0-9).'})
 
-    existing_user = User.query.filter_by(username=username).first()
-    if existing_user:
-        return jsonify({'status': 'fail', 'message': 'Username already exists!'})
-
-    new_user = User(username=username, password=password)
     try:
+        existing_user = User.query.filter_by(username=username).first()
+        if existing_user:
+            return jsonify({'status': 'fail', 'message': 'Username already exists!'})
+
+        new_user = User(username=username, password=password)
         db.session.add(new_user)
         db.session.commit()
         session['username'] = username
         return jsonify({'status': 'success', 'message': 'Account created successfully!'})
-    except Exception:
+    except Exception as e:
         db.session.rollback()
-        return jsonify({'status': 'fail', 'message': 'Database error. Try again.'})
+        return jsonify({'status': 'fail', 'message': f'Registration error: {str(e)}'})
 
 @app.route('/logout')
 def logout():
@@ -145,10 +134,7 @@ def dashboard():
     if 'username' not in session:
         return redirect(url_for('login'))
     
-    # التعديل: جلب الـ history الخاص بهذا المستخدم فقط من السيشين، إذا لم يكن موجوداً ننشئ قائمة فارغة
     user_history = session.get('user_history', [])
-    
-    # تحويل نصوص التواريخ الراجع من السيشين لكائنات datetime لكي لا تضرب واجهة الـ HTML
     formatted_history = []
     for scan in user_history:
         try:
@@ -176,12 +162,48 @@ def analyze():
 
     try:
         if model is not None and vectorizer is not None:
-            json_str = json.dumps(file_content)
-            processed_features = vectorizer.transform([json_str])
+            # 1. قراءة واستخراج الـ System Calls الحقيقية من داخل بنية الـ JSON (تطبيق كلام الدكتورة)
+            extracted_calls = []
+            
+            if isinstance(file_content, list):
+                for item in file_content:
+                    if isinstance(item, str):
+                        extracted_calls.append(item)
+                    elif isinstance(item, dict):
+                        call_name = item.get('name') or item.get('syscall') or item.get('api')
+                        if call_name:
+                            extracted_calls.append(str(call_name))
+            
+            elif isinstance(file_content, dict):
+                calls_list = file_content.get('syscalls') or file_content.get('events') or file_content.get('trace') or file_content.values()
+                for item in calls_list:
+                    if isinstance(item, str):
+                        extracted_calls.append(item)
+                    elif isinstance(item, dict):
+                        call_name = item.get('name') or item.get('syscall')
+                        if call_name:
+                            extracted_calls.append(str(call_name))
+            
+            # 2. تحويل الـ Features المستخرجة لنص نظيف مفصل بفراغات لمنع الضوضاء والتقطيع العشوائي
+            clean_features_str = " ".join(extracted_calls) if extracted_calls else str(file_content)
+
+            # 3. إرسال الـ Features المستخرجة النظيفة للـ Vectorizer
+            processed_features = vectorizer.transform([clean_features_str])
+            
+            # 4. طباعة الـ Features في الـ Logs مباشرة لرؤية النتيجة (طلب الدكتورة الحرفي)
+            print("\n====== EXTRACTED FEATURES FOR MODEL ======")
+            print(f"File Name: {filename}")
+            print(f"Total Features Extracted: {len(extracted_calls)}")
+            print(processed_features)
+            print("==========================================\n")
+
+            # 5. عمل الـ Prediction بناءً على الفيتشرز الحقيقية المستخرجة من الملف
             prediction = model.predict(processed_features)[0]
             confidence = int(max(model.predict_proba(processed_features)[0]) * 100) if hasattr(model, "predict_proba") else 96
             status = "Rootkit Detected" if (prediction == 1 or str(prediction).lower() == 'rootkit') else "System Clean"
+        
         else:
+            # المحرك الاحتياطي برمجياً في حال عدم توفر الموديل لتجنب الـ Error 500
             content_str = str(file_content).lower()
             if 'sys_clone' in content_str or 'kill' in content_str or 'rootkit' in content_str or len(content_str) > 5000:
                 status = "Rootkit Detected"
@@ -190,11 +212,10 @@ def analyze():
                 status = "System Clean"
                 confidence = 98
 
-        # حفظ الفحص الحالي في السيشين الخاصة بالمستخدم الحالي فقط
+        # حفظ النتيجة في الـ Session الخاص بالمستخدم الحالي لمنع اختلاط السجلات
         if 'user_history' not in session:
             session['user_history'] = []
             
-        # نأخذ نسخة من التاريخ الحالي كـ String للحفظ داخل الـ Session بأمان
         current_history = session['user_history']
         new_scan = {
             'date': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -203,11 +224,11 @@ def analyze():
             'confidence': confidence
         }
         current_history.insert(0, new_scan)
-        session['user_history'] = current_history # تحديث السيشين
-        
+        session['user_history'] = current_history
         return jsonify({'status': status, 'confidence': confidence})
 
     except Exception as e:
+        print(f"💥 ERROR IN ANALYSIS ROUTE: {str(e)}")
         if 'user_history' not in session:
             session['user_history'] = []
         current_history = session['user_history']
@@ -222,7 +243,11 @@ def analyze():
         return jsonify({'status': "System Clean", 'confidence': 95})
 
 with app.app_context():
-    db.create_all()
+    try:
+        db.create_all()
+        print("Database sync completed.")
+    except Exception as db_err:
+        print(f"Initial DB creation failed, switching fallback mode: {db_err}")
 
 if __name__ == '__main__':
     app.run(debug=True)

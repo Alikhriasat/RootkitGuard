@@ -12,7 +12,6 @@ app.secret_key = os.environ.get("SECRET_KEY", "rootkit_guard_secure_key_2026")
 # نظام الحماية الذكي لقاعدة البيانات لمنع الـ Error 500 تماماً
 db_url = os.environ.get("DATABASE_URL")
 if db_url:
-    # لتصحيح الرابط تلقائياً إذا كان يبدأ بـ postgres:// ليصبح postgresql://
     if db_url.startswith("postgres://"):
         db_url = db_url.replace("postgres://", "postgresql://", 1)
     app.config['SQLALCHEMY_DATABASE_URI'] = db_url
@@ -46,6 +45,28 @@ try:
 except Exception as e:
     print(f"Error loading ML models: {e}")
 print("=== END OF AI MODEL CHECK ===")
+
+# قائمة الـ Features الرسمية والنظيفة المأخوذة من صورتك بالظبط لفلترة ملف الـ JSON
+ALLOWED_FEATURES = {
+    '_sysctl', 'accept', 'accept4', 'access', 'acct', 'add_key', 'adjtimex', 'alarm', 
+    'arch_prctl', 'bind', 'bpf', 'brk', 'capget', 'capset', 'chdir', 'chmod', 'chown', 
+    'chroot', 'clock_adjtime', 'clock_getres', 'clock_gettime', 'clock_nanosleep', 
+    'clock_settime', 'clone', 'clone3', 'close', 'close_range', 'connect', 'copy_file_range', 
+    'creat', 'delete_module', 'dup', 'dup2', 'dup3', 'epoll_create', 'epoll_create1', 
+    'epoll_ctl', 'epoll_pwait', 'epoll_pwait2', 'epoll_wait', 'eventfd', 'eventfd2', 
+    'execve', 'execveat', 'exit', 'exit_group', 'faccessat', 'faccessat2', 'fadvise64', 
+    'falloc', 'allocate', 'fanotify_init', 'fanotify_mark', 'fchdir', 'fchmod', 'fchmodat', 
+    'fchown', 'fchownat', 'fcntl', 'fdatasync', 'fgetxattr', 'finit_module', 'flistxattr', 
+    'flock', 'fremovexattr', 'fsetxattr', 'fsmount', 'fsopen', 'fspick', 'fstat', 'fstatfs', 
+    'fsync', 'ftruncate', 'futex', 'futimesat', 'getcwd', 'getdents', 'getdents64', 
+    'getegid', 'geteuid', 'getgid', 'getgroups', 'getitimer', 'getpeername', 'getpgid', 
+    'getpgrp', 'getpid', 'getppid', 'getpriority', 'getrandom', 'getresgid', 'getresuid', 
+    'getrlimit', 'getrusage', 'getsid', 'gettid', 'getsockname', 'getsockopt', 'gettimeofday', 
+    'getuid', 'getxattr', 'inotify_add_watch', 'inotify_init', 'inotify_init1', 'inotify_rm_watch', 
+    'io_cancel', 'io_destroy', 'io_getevents', 'io_setup', 'io_submit', 'io_uring_enter', 
+    'io_uring_register', 'io_uring_setup', 'ioctl', 'ioperm', 'iopl', 'ioprio_get', 'ioprio_set', 
+    'kcmp', 'keyctl', 'kill', 'lchown', 'lgetxattr', 'link', 'linkat'
+}
 
 @app.route('/')
 def home():
@@ -162,48 +183,33 @@ def analyze():
 
     try:
         if model is not None and vectorizer is not None:
-            # 1. قراءة واستخراج الـ System Calls الحقيقية من داخل بنية الـ JSON (تطبيق كلام الدكتورة)
-            extracted_calls = []
+            # استخراج الكلمات من ملف الـ JSON ومقارنتها بقائمة الـ Features المسموحة فقط من صورتك
+            content_str = str(file_content)
+            found_words = re.findall(r'(?u)\b\w+\b', content_str)
             
-            if isinstance(file_content, list):
-                for item in file_content:
-                    if isinstance(item, str):
-                        extracted_calls.append(item)
-                    elif isinstance(item, dict):
-                        call_name = item.get('name') or item.get('syscall') or item.get('api')
-                        if call_name:
-                            extracted_calls.append(str(call_name))
+            # فلترة الكلمات بحيث لا نأخذ إلا الـ System Calls الحقيقية الموجودة في صورتك بالظبط
+            filtered_calls = [word for word in found_words if word in ALLOWED_FEATURES]
             
-            elif isinstance(file_content, dict):
-                calls_list = file_content.get('syscalls') or file_content.get('events') or file_content.get('trace') or file_content.values()
-                for item in calls_list:
-                    if isinstance(item, str):
-                        extracted_calls.append(item)
-                    elif isinstance(item, dict):
-                        call_name = item.get('name') or item.get('syscall')
-                        if call_name:
-                            extracted_calls.append(str(call_name))
-            
-            # 2. تحويل الـ Features المستخرجة لنص نظيف مفصل بفراغات لمنع الضوضاء والتقطيع العشوائي
-            clean_features_str = " ".join(extracted_calls) if extracted_calls else str(file_content)
+            # دمج الـ Features المستخرجة بنص نظيف ليمر عبر الـ Vectorizer
+            clean_features_str = " ".join(filtered_calls) if filtered_calls else "clean_system"
 
-            # 3. إرسال الـ Features المستخرجة النظيفة للـ Vectorizer
+            # إرسال الـ Features المصفاة للـ Vectorizer (تطبيق فكرة الدكتورة)
             processed_features = vectorizer.transform([clean_features_str])
             
-            # 4. طباعة الـ Features في الـ Logs مباشرة لرؤية النتيجة (طلب الدكتورة الحرفي)
+            # طباعة الـ Features في الـ Logs مباشرة لرؤية النتيجة (طلب الدكتورة الحرفي)
             print("\n====== EXTRACTED FEATURES FOR MODEL ======")
             print(f"File Name: {filename}")
-            print(f"Total Features Extracted: {len(extracted_calls)}")
+            print(f"Total Matches Found from Image Features: {len(filtered_calls)}")
             print(processed_features)
             print("==========================================\n")
 
-            # 5. عمل الـ Prediction بناءً على الفيتشرز الحقيقية المستخرجة من الملف
+            # التنبؤ بناءً على الفيتشرز المستخرجة حصرياً
             prediction = model.predict(processed_features)[0]
             confidence = int(max(model.predict_proba(processed_features)[0]) * 100) if hasattr(model, "predict_proba") else 96
             status = "Rootkit Detected" if (prediction == 1 or str(prediction).lower() == 'rootkit') else "System Clean"
         
         else:
-            # المحرك الاحتياطي برمجياً في حال عدم توفر الموديل لتجنب الـ Error 500
+            # محرك الفحص الاحتياطي برمجياً لحماية السيرفر
             content_str = str(file_content).lower()
             if 'sys_clone' in content_str or 'kill' in content_str or 'rootkit' in content_str or len(content_str) > 5000:
                 status = "Rootkit Detected"
@@ -212,7 +218,7 @@ def analyze():
                 status = "System Clean"
                 confidence = 98
 
-        # حفظ النتيجة في الـ Session الخاص بالمستخدم الحالي لمنع اختلاط السجلات
+        # حفظ النتيجة في الـ Session الخاص بالمستخدم الحالي
         if 'user_history' not in session:
             session['user_history'] = []
             

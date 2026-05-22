@@ -8,14 +8,14 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your_super_secret_key_here'
-# الاتصال بقاعدة بيانات Render أونلاين المتزامنة مع الـ pgAdmin
+# الاتصال بقاعدة بيانات Render أونلاين
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL') 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
 # =========================================================
-# 1. تعريف موديل قاعدة البيانات (User Model) مع التشفير بـ 256 حرفاً
+# 1. تعريف موديل قاعدة البيانات (User Model)
 # =========================================================
 class User(db.Model):
     __tablename__ = 'user'
@@ -24,7 +24,7 @@ class User(db.Model):
     password = db.Column(db.String(256), nullable=False)
 
 # =========================================================
-# 2. تحميل موديلات الذكاء الاصطناعي الجديدة (Random Forest Pipeline)
+# 2. تحميل موديلات الذكاء الاصطناعي الجديدة 
 # =========================================================
 model = None
 vectorizer = None
@@ -32,7 +32,6 @@ vectorizer = None
 print("=== STARTING AI MODEL CHECK ===")
 try:
     print(f"Current Working Directory: {os.getcwd()}")
-    # استدعاء الموديل الجديد والـ Vectorizer بدون الـ Selector القديم لتسريع الفحص
     if os.path.exists('rf_syscall_model.pkl'):
         model = joblib.load('rf_syscall_model.pkl')
         print("✔ 'rf_syscall_model.pkl' LOADED SUCCESSFULLY!")
@@ -46,7 +45,7 @@ print("=== END OF AI MODEL CHECK ===")
 
 
 # =========================================================
-# 3. دالة تنظيف ومعالجة الـ Features النصية (من ملف predict_from_json)
+# 3. دالة تنظيف ومعالجة الميزات النصية (من ملف predict_from_json)
 # =========================================================
 def clean_sequence(text):
     text = str(text).lower()
@@ -57,12 +56,13 @@ def clean_sequence(text):
 
 
 # =========================================================
-# 4. الـ Routes الخاصة بنظام التشغيل والفحص (Detection & Backend)
+# 4. الـ Routes الخاصة بنظام الفحص والواجهات الرسومية
 # =========================================================
 
 @app.route('/')
 def home():
-    return render_template('index.html')
+    # توجيه المستخدم مباشرة إلى صفحة تسجيل الدخول أو الواجهة الرئيسية الفعالة
+    return render_template('login.html')
 
 @app.route('/dashboard')
 def dashboard():
@@ -79,11 +79,10 @@ def detect():
 
     if file and file.filename.endswith('.json'):
         try:
-            # قراءة ملف الـ JSON المرفوع من الموقع وتفكيكه
             content = file.read().decode('utf-8')
             data = json.loads(content)
             
-            # استخراج سلسلة نداءات النظام (System Calls) بناءً على الهيكلية المرنة
+            # استخراج سلسلة نداءات النظام بناءً على الهيكلية المرنة لملفات الـ JSON
             if isinstance(data, list) and len(data) > 0:
                 sequence = data[0].get('sequence', '')
                 sample_name = data[0].get('name', 'Uploaded Sample')
@@ -97,20 +96,19 @@ def detect():
             if not sequence:
                 return jsonify({'error': 'No syscall sequence found in JSON structure.'}), 400
 
-            # تطبيق دالة المعالجة والتنظيف المستوردة من ملف predict_from_json
+            # معالجة وتنظيف السلسلة بناءً على كود predict_from_json
             cleaned = clean_sequence(sequence)
             
-            # تحويل النصوص والـ Features إلى تمثيل رقمي ممرر للموديل مباشرة
+            # تحويل النص المُنظف مباشرة عبر الـ Vectorizer الجديد
             X_transformed = vectorizer.transform([cleaned])
             
-            # التنبؤ النهائي عبر موديل الـ Random Forest الجديد
+            # التنبؤ النهائي عبر موديل الـ Random Forest
             prediction = model.predict(X_transformed)[0]
             
-            # إرسال النتيجة إلى واجهة المستخدم الرسومية في الموقع
             return jsonify({
                 'filename': file.filename,
                 'sample_name': sample_name,
-                'prediction': str(prediction),  # تعيد النتيجة الحقيقية (Rootkit / Normal)
+                'prediction': str(prediction),
                 'status': 'success'
             })
 
@@ -121,7 +119,7 @@ def detect():
 
 
 # =========================================================
-# 5. الـ Routes الخاصة بنظام الحماية وتشفير الحسابات (Auth System)
+# 5. الـ Routes الخاصة بنظام الحماية والـ Authentication
 # =========================================================
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -135,7 +133,6 @@ def register():
             flash('Username already exists!', 'danger')
             return redirect(url_for('register'))
         
-        # تشفير كلمة المرور بحماية عالية لتتطابق مع الـ 256 حرفاً في الداتابيز الفعالة
         hashed_password = generate_password_hash(password, method='scrypt')
         new_user = User(username=username, password=hashed_password)
         
@@ -163,10 +160,10 @@ def login():
 
 
 # =========================================================
-# 6. نقطة انطلاق السيرفر ومزامنة الجداول تلقائياً عند التشغيل
+# 6. تشغيل السيرفر ومزامنة قاعدة البيانات
 # =========================================================
 if __name__ == '__main__':
     with app.app_context():
-        db.create_all()  # إنشاء جدول الـ user بحجمه الجديد تلقائياً إذا تم تصفيره
+        db.create_all()
         print("Database sync completed.")
     app.run(debug=True)

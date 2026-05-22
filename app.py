@@ -22,14 +22,13 @@ else:
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-# تعريف جدول المستخدمين
+# تعريف جدول المستخدمين بعد التعديل ليتسع للتشفير
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(150), unique=True, nullable=False)
-    password = db.Column(db.String(150), nullable=False)
+    password = db.Column(db.String(256), nullable=False)  # ⬅ تم تغييرها هنا من 150 إلى 256
     failed_attempts = db.Column(db.Integer, default=0)
     lockout_until = db.Column(db.DateTime, nullable=True)
-
 # تحميل موديلات الذكاء الاصطناعي مع حماية كاملة وطباعة تقرير للـ Logs
 model = None
 vectorizer = None

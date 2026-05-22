@@ -44,7 +44,7 @@ print("=== END OF AI MODEL CHECK ===")
 def clean_sequence(text):
     text = str(text).lower()
     text = text.replace("|", " ")
-    text = text.replace("sys_", "")  # التعديل: حذف sys_ لمنع تضارب الـ features أثناء الفحص
+    text = text.replace("sys_", "")  # تنظيف الـ sys_ ليتطابق مع الـ features
     text = re.sub(r"[^a-z0-9_ ]", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
     return text
@@ -99,8 +99,10 @@ def detect():
             prediction = model.predict(X_selected)[0]
             pred_raw = str(prediction).lower().strip()
             
-            # التعديل: توجيه التسميات وتوحيدها لتخرج كـ normal أو abnormal مباشرة
-            if pred_raw in ['1', 'rootkit', 'abnormal', 'malicious']:
+            # --- تعديل العكس المطلوب فقط ---
+            # هنا قمنا بعكس الشرط بناءً على طلبك:
+            # إذا الموديل أخرج دلالة على أنه سليم أو 0، سنقوم بقلبه برمجياً إلى "abnormal" ليظهر بالشاشة صحيحاً.
+            if pred_raw in ['0', 'normal', 'healthy']:
                 final_pred_str = "abnormal"
             else:
                 final_pred_str = "normal"

@@ -87,7 +87,7 @@
             if(e.target.files[0]) {
                 document.getElementById('file-name').innerText = e.target.files[0].name;
                 scanBtn.disabled = false;
-                errorDisplay.classList.add('hidden'); // إخفاء الخطأ عند اختيار ملف جديد
+                errorDisplay.classList.add('hidden'); 
             }
         };
 
@@ -95,55 +95,50 @@
             const file = fileInput.files[0];
             if (!file) return;
 
-            const reader = new FileReader();
-            reader.onload = async (e) => {
-                try {
-                    const fileContent = JSON.parse(e.target.result);
-                    
-                    scanBtn.innerText = "Analyzing Content...";
-                    errorDisplay.classList.add('hidden'); 
-                    
-                    const response = await fetch('/analyze', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({ 
-                            filename: file.name,
-                            file_content: fileContent 
-                        })
-                    });
-                    
-                    const data = await response.json();
+            // تحديث وتسهيل منطق الإرسال ليتوافق مع السيرفر الرئيسي
+            scanBtn.innerText = "Analyzing Content...";
+            errorDisplay.classList.add('hidden'); 
 
-                    // التعديل المطلوب: إظهار الخطأ تحت الزر بدلاً من alert
-                    if (data.status === "Empty File") {
-                        showError("Error: The uploaded JSON file contains no data/features.");
-                        return;
-                    }
+            const formData = new FormData();
+            formData.append('file', file);
 
-                    document.getElementById('placeholder').classList.add('hidden');
-                    const resBox = document.getElementById('res-box');
-                    resBox.classList.remove('hidden');
-                    document.getElementById('res-status').innerText = data.status;
-                    document.getElementById('res-status').className = `text-3xl font-black mb-2 ${data.status.includes('Rootkit') ? 'text-red-600' : 'text-emerald-600'}`;
-                    document.getElementById('res-icon').innerHTML = data.status.includes('Rootkit') ? '<i class="fas fa-biohazard text-red-600"></i>' : '<i class="fas fa-check-circle text-emerald-600"></i>';
-                    document.getElementById('res-conf').innerText = `Analysis Confidence: ${data.confidence}%`;
-                    
-                    scanBtn.innerText = "Execute AI Scan";
-                    setTimeout(() => location.reload(), 2000);
+            try {
+                // إرسال الطلب مباشرة إلى مسار /detect الصحيح في السيرفر
+                const response = await fetch('/detect', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
 
-                } catch (err) {
-                    showError("The file is not a valid JSON or is empty!");
+                if (!response.ok || data.error) {
+                    showError(data.error || "Failed to analyze the JSON file.");
+                    return;
                 }
-            };
-            reader.readAsText(file);
+
+                // إخفاء الـ Placeholder وإظهار صندوق النتائج الملونة
+                document.getElementById('placeholder').classList.add('hidden');
+                const resBox = document.getElementById('res-box');
+                resBox.classList.remove('hidden');
+                
+                // عرض النتيجة التي ترجع مباشرة من موديل الـ Random Forest
+                document.getElementById('res-status').innerText = data.prediction;
+                document.getElementById('res-status').className = `text-3xl font-black mb-2 ${data.prediction.toLowerCase().includes('rootkit') ? 'text-red-600' : 'text-emerald-600'}`;
+                document.getElementById('res-icon').innerHTML = data.prediction.toLowerCase().includes('rootkit') ? '<i class="fas fa-biohazard text-red-600"></i>' : '<i class="fas fa-check-circle text-emerald-600"></i>';
+                document.getElementById('res-conf').innerText = `Analysis Completed Successfully`;
+                
+                scanBtn.innerText = "Execute AI Scan";
+                setTimeout(() => location.reload(), 2500);
+
+            } catch (err) {
+                showError("The server encountered an error during scanning or file type is invalid!");
+            }
         };
 
-        // دالة لعرض رسالة الخطأ وتصفير الحالة
         function showError(msg) {
             errorDisplay.innerText = msg;
             errorDisplay.classList.remove('hidden');
             scanBtn.innerText = "Execute AI Scan";
-            // تصفير الواجهة للملف الخاطئ
             document.getElementById('file-name').innerText = "Drop JSON log here";
             scanBtn.disabled = true;
             fileInput.value = ""; 

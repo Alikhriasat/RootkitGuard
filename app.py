@@ -44,6 +44,7 @@ print("=== END OF AI MODEL CHECK ===")
 def clean_sequence(text):
     text = str(text).lower()
     text = text.replace("|", " ")
+    text = text.replace("sys_", "")  # التعديل: حذف sys_ لمنع تضارب الـ features أثناء الفحص
     text = re.sub(r"[^a-z0-9_ ]", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
     return text
@@ -96,6 +97,13 @@ def detect():
             
             # التنبؤ الفعلي من الـ Random Forest
             prediction = model.predict(X_selected)[0]
+            pred_raw = str(prediction).lower().strip()
+            
+            # التعديل: توجيه التسميات وتوحيدها لتخرج كـ normal أو abnormal مباشرة
+            if pred_raw in ['1', 'rootkit', 'abnormal', 'malicious']:
+                final_pred_str = "abnormal"
+            else:
+                final_pred_str = "normal"
             
             # حساب نسبة الـ Confidence الحقيقية للموديل
             confidence = 100
@@ -107,7 +115,7 @@ def detect():
 
             return jsonify({
                 'filename': file.filename,
-                'prediction': str(prediction),
+                'prediction': final_pred_str,
                 'confidence': confidence,
                 'status': 'success'
             })

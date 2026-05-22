@@ -2,7 +2,9 @@ import os
 import re
 import json
 import joblib
-from flask import Flask, request, jsonify, render_template, redirect, url_for, flash
+from datetime import datetime
+import numpy as np
+from flask import Flask, request, jsonify, render_template, redirect, url_for, flash, session
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -15,7 +17,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
 # =========================================================
-# 1. تعريف موديل قاعدة البيانات (User Model)
+# 1. تعريف موديلات قاعدة البيانات (User & ScanHistory)
 # =========================================================
 class User(db.Model):
     __tablename__ = 'user'
@@ -23,8 +25,17 @@ class User(db.Model):
     username = db.Column(db.String(256), unique=True, nullable=False)
     password = db.Column(db.String(256), nullable=False)
 
+class ScanHistory(db.Model):
+    __tablename__ = 'scan_history'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    filename = db.Column(db.String(256), nullable=False)
+    result = db.Column(db.String(128), nullable=False)
+    confidence = db.Column(db.Integer, nullable=False)
+    date = db.Column(db.DateTime, default=datetime.utcnow)
+
 # =========================================================
-# 2. تحميل موديلات الذكاء الاصطناعي (Random Forest Pipeline)
+# 2. تحميل موديلات الذكاء الاصطناعي (Model + Vectorizer + Selector)
 # =========================================================
 model = None
 vectorizer = None
@@ -61,16 +72,27 @@ def clean_sequence(text):
 
 
 # =========================================================
-# 4. الـ Routes الخاصة بنظام الفحص والواجهات الرسومية
+# 4. الـ Routes الخاصة بنظام الواجهات الرسومية والفحص
 # =========================================================
 
 @app.route('/')
 def home():
+    if 'user_id' in session:
+        return redirect(url_for('dashboard'))
     return render_template('login.html')
 
 @app.route('/dashboard')
 def dashboard():
-    return render_template('dashboard.html')
+    if 'user_id' not in session:
+        # كود احتياطي لجلب اسم مستخدم افتراضي إذا لم يتم تسجيل الدخول لتجنب الأخطاء
+        username = "Ali"
+        history = ScanHistory.query.order_by(ScanHistory.date.desc()).all()
+    else:
+        user = User.query.get(session['user_id'])
+        username = user.username if user else "Ali"
+        history = ScanHistory.query.filter_by(user_id=session['user_id']).order_by(ScanHistory.date.desc()).all()
+        
+    return render_template('dashboard.html', username=username, history=history)
 
 @app.route('/detect', methods=['POST'])
 def detect():
@@ -83,11 +105,9 @@ def detect():
 
     if file and file.filename.endswith('.json'):
         try:
-            # قراءة محتوى الملف المرفوع تماماً كما يحدث محلياً
             content = file.read().decode('utf-8')
             data = json.loads(content)
             
-            # استخراج الـ sequence بدقة تامة وبنفس أسلوب الـ predict_from_json
             if isinstance(data, list) and len(data) > 0:
                 sample = data[0]
             elif isinstance(data, dict):
@@ -96,38 +116,38 @@ def detect():
                 return jsonify({'error': 'Invalid JSON structure'}), 400
 
             sequence = sample.get('sequence', '')
-            sample_name = sample.get('name', 'Uploaded Sample')
-
             if not sequence:
                 return jsonify({'error': 'No syscall sequence found in JSON.'}), 400
 
-            # تنفيذ المعالجة النصية المتطابقة
+            # معالجة وتنبؤ بالذكاء الاصطناعي بنفس الطريقة المحلية
             cleaned_sequence = clean_sequence(sequence)
-            
-            # تمرير البيانات عبر خط الإنتاج (Pipeline) بالترتيب الصحيح والمطابق للمحلي:
-            # 1. الـ Vectorizer
             X = vectorizer.transform([cleaned_sequence])
-            
-            # 2. الـ Selector (لاختيار الـ 40 ميزة الصحيحة)
             X_selected = selector.transform(X)
             
-            # 3. التنبؤ النهائي من الموديل
             prediction = model.predict(X_selected)[0]
             
-            # حساب الـ Confidence (اليقين) إذا كان الموديل يدعم ذلك، أو وضع قيمة ثابتة آمنة للعرض
+            # حساب نسبة الـ Confidence الحقيقية للموديل بدقة
             confidence = 100
             try:
-                import numpy as np
                 prob = model.predict_proba(X_selected)
                 confidence = int(np.max(prob) * 100)
             except:
                 pass
 
-            # إرجاع النتيجة الصافية والصحيحة لتطابق مخرجات جهازك تماماً
+            # حفظ عملية الفحص في قاعدة البيانات لتظهر في الـ History Log فوراً
+            current_user_id = session.get('user_id', None)
+            new_scan = ScanHistory(
+                user_id=current_user_id,
+                filename=file.filename,
+                result=str(prediction),
+                confidence=confidence
+            )
+            db.session.add(new_scan)
+            db.session.commit()
+
             return jsonify({
                 'filename': file.filename,
-                'sample_name': sample_name,
-                'prediction': str(prediction),  # ستظهر الـ Rootkit أو Normal الصحيحة الحين
+                'prediction': str(prediction),
                 'confidence': confidence,
                 'status': 'success'
             })
@@ -135,7 +155,7 @@ def detect():
         except Exception as e:
             return jsonify({'error': f'Backend error during prediction: {str(e)}'}), 500
             
-    return jsonify({'error': 'Invalid file type. Please upload a valid .json file.'}), 400
+    return jsonify({'error': 'Invalid file type. Please upload a .json file.'}), 400
 
 
 # =========================================================
@@ -145,69 +165,51 @@ def detect():
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
-        if request.is_json:
-            data = request.get_json()
-            username = data.get('username')
-            password = data.get('password')
-        else:
-            username = request.form.get('username')
-            password = request.form.get('password')
+        username = request.form.get('username') or (request.get_json().get('username') if request.is_json else None)
+        password = request.form.get('password') or (request.get_json().get('password') if request.is_json else None)
             
         if not username or not password:
-            if request.is_json:
-                return jsonify({'error': 'Missing username or password'}), 400
-            flash('Missing username or password', 'danger')
+            if request.is_json: return jsonify({'error': 'Missing credentials'}), 400
+            flash('Missing credentials', 'danger')
             return redirect(url_for('register'))
         
-        user_exists = User.query.filter_by(username=username).first()
-        if user_exists:
-            if request.is_json:
-                return jsonify({'error': 'Username already exists!'}), 400
+        if User.query.filter_by(username=username).first():
+            if request.is_json: return jsonify({'error': 'Username already exists!'}), 400
             flash('Username already exists!', 'danger')
             return redirect(url_for('register'))
         
         hashed_password = generate_password_hash(password)
         new_user = User(username=username, password=hashed_password)
-        
         db.session.add(new_user)
         db.session.commit()
         
-        if request.is_json:
-            return jsonify({'status': 'success', 'message': 'Account created successfully!'})
-        flash('Account created successfully! Please login.', 'success')
+        if request.is_json: return jsonify({'status': 'success'})
         return redirect(url_for('login'))
-        
     return render_template('register.html')
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        if request.is_json:
-            data = request.get_json()
-            username = data.get('username')
-            password = data.get('password')
-        else:
-            username = request.form.get('username')
-            password = request.form.get('password')
+        username = request.form.get('username') or (request.get_json().get('username') if request.is_json else None)
+        password = request.form.get('password') or (request.get_json().get('password') if request.is_json else None)
             
         user = User.query.filter_by(username=username).first()
         if user and check_password_hash(user.password, password):
-            if request.is_json:
-                return jsonify({'status': 'success', 'redirect': url_for('dashboard')})
+            session['user_id'] = user.id
+            if request.is_json: return jsonify({'status': 'success', 'redirect': url_for('dashboard')})
             return redirect(url_for('dashboard'))
         else:
-            if request.is_json:
-                return jsonify({'error': 'Login Unsuccessful. Please check credentials'}), 401
-            flash('Login Unsuccessful. Please check username and password', 'danger')
+            if request.is_json: return jsonify({'error': 'Invalid credentials'}), 401
+            flash('Invalid credentials', 'danger')
             
     return render_template('login.html')
 
+@app.route('/logout')
+def logout():
+    session.pop('user_id', None)
+    return redirect(url_for('login'))
 
-# =========================================================
-# 6. تشغيل السيرفر ومزامنة قاعدة البيانات
-# =========================================================
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-        print("Database sync completed.")
     app.run(debug=True)

@@ -24,10 +24,11 @@ class User(db.Model):
     password = db.Column(db.String(256), nullable=False)
 
 # =========================================================
-# 2. تحميل موديلات الذكاء الاصطناعي الجديدة 
+# 2. تحميل موديلات الذكاء الاصطناعي (Model + Vectorizer + Selector)
 # =========================================================
 model = None
 vectorizer = None
+selector = None
 
 print("=== STARTING AI MODEL CHECK ===")
 try:
@@ -39,6 +40,13 @@ try:
     if os.path.exists('rf_vectorizer.pkl'):
         vectorizer = joblib.load('rf_vectorizer.pkl')
         print("✔ 'rf_vectorizer.pkl' LOADED SUCCESSFULLY!")
+
+    # إضافة الـ Selector لحل مشكلة الـ 40 ميزة
+    if os.path.exists('rf_selector.pkl'):
+        selector = joblib.load('rf_selector.pkl')
+        print("✔ 'rf_selector.pkl' LOADED SUCCESSFULLY!")
+    else:
+        print("❌ CRITICAL: 'rf_selector.pkl' NOT FOUND!")
 except Exception as e:
     print(f"Error loading ML models: {e}")
 print("=== END OF AI MODEL CHECK ===")
@@ -94,8 +102,19 @@ def detect():
             if not sequence:
                 return jsonify({'error': 'No syscall sequence found in JSON structure.'}), 400
 
+            # 1. تنظيف النص
             cleaned = clean_sequence(sequence)
+            
+            # 2. تحويل النص عبر الـ Vectorizer (ينتج 509 ميزة)
             X_transformed = vectorizer.transform([cleaned])
+            
+            # 3. اختصار الميزات عبر الـ Selector إلى (40 ميزة) لحل المشكلة
+            if selector is not None:
+                X_transformed = selector.transform(X_transformed)
+            else:
+                return jsonify({'error': 'Feature selector model is missing on server.'}), 500
+            
+            # 4. التنبؤ النهائي عبر موديل الـ Random Forest
             prediction = model.predict(X_transformed)[0]
             
             return jsonify({
@@ -118,7 +137,6 @@ def detect():
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
-        # التحقق البرمجي الشامل من استقبال البيانات سواء كـ Form أو JSON لمرونة الـ API
         if request.is_json:
             data = request.get_json()
             username = data.get('username')
@@ -140,7 +158,6 @@ def register():
             flash('Username already exists!', 'danger')
             return redirect(url_for('register'))
         
-        # تصحيح دالة التشفير لتتوافق تلقائياً مع معايير الحماية الحديثة وبأعلى أمان
         hashed_password = generate_password_hash(password)
         new_user = User(username=username, password=hashed_password)
         

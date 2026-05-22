@@ -61,7 +61,6 @@ def clean_sequence(text):
 
 @app.route('/')
 def home():
-    # توجيه المستخدم مباشرة إلى صفحة تسجيل الدخول أو الواجهة الرئيسية الفعالة
     return render_template('login.html')
 
 @app.route('/dashboard')
@@ -82,7 +81,6 @@ def detect():
             content = file.read().decode('utf-8')
             data = json.loads(content)
             
-            # استخراج سلسلة نداءات النظام بناءً على الهيكلية المرنة لملفات الـ JSON
             if isinstance(data, list) and len(data) > 0:
                 sequence = data[0].get('sequence', '')
                 sample_name = data[0].get('name', 'Uploaded Sample')
@@ -96,13 +94,8 @@ def detect():
             if not sequence:
                 return jsonify({'error': 'No syscall sequence found in JSON structure.'}), 400
 
-            # معالجة وتنظيف السلسلة بناءً على كود predict_from_json
             cleaned = clean_sequence(sequence)
-            
-            # تحويل النص المُنظف مباشرة عبر الـ Vectorizer الجديد
             X_transformed = vectorizer.transform([cleaned])
-            
-            # التنبؤ النهائي عبر موديل الـ Random Forest
             prediction = model.predict(X_transformed)[0]
             
             return jsonify({
@@ -125,20 +118,37 @@ def detect():
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
+        # التحقق البرمجي الشامل من استقبال البيانات سواء كـ Form أو JSON لمرونة الـ API
+        if request.is_json:
+            data = request.get_json()
+            username = data.get('username')
+            password = data.get('password')
+        else:
+            username = request.form.get('username')
+            password = request.form.get('password')
+            
+        if not username or not password:
+            if request.is_json:
+                return jsonify({'error': 'Missing username or password'}), 400
+            flash('Missing username or password', 'danger')
+            return redirect(url_for('register'))
         
         user_exists = User.query.filter_by(username=username).first()
         if user_exists:
+            if request.is_json:
+                return jsonify({'error': 'Username already exists!'}), 400
             flash('Username already exists!', 'danger')
             return redirect(url_for('register'))
         
-        hashed_password = generate_password_hash(password, method='scrypt')
+        # تصحيح دالة التشفير لتتوافق تلقائياً مع معايير الحماية الحديثة وبأعلى أمان
+        hashed_password = generate_password_hash(password)
         new_user = User(username=username, password=hashed_password)
         
         db.session.add(new_user)
         db.session.commit()
         
+        if request.is_json:
+            return jsonify({'status': 'success', 'message': 'Account created successfully!'})
         flash('Account created successfully! Please login.', 'success')
         return redirect(url_for('login'))
         
@@ -147,13 +157,22 @@ def register():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        
+        if request.is_json:
+            data = request.get_json()
+            username = data.get('username')
+            password = data.get('password')
+        else:
+            username = request.form.get('username')
+            password = request.form.get('password')
+            
         user = User.query.filter_by(username=username).first()
         if user and check_password_hash(user.password, password):
+            if request.is_json:
+                return jsonify({'status': 'success', 'redirect': url_for('dashboard')})
             return redirect(url_for('dashboard'))
         else:
+            if request.is_json:
+                return jsonify({'error': 'Login Unsuccessful. Please check credentials'}), 401
             flash('Login Unsuccessful. Please check username and password', 'danger')
             
     return render_template('login.html')

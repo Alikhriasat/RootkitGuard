@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
+from werkzeug.security import generate_password_hash, check_password_hash
 import joblib
 import json
 from datetime import datetime, timedelta
@@ -91,7 +92,8 @@ def login():
                     remaining_time = int((user.lockout_until - datetime.utcnow()).total_seconds())
                     return jsonify({'status': 'fail', 'message': f'Account locked! Wait {remaining_time} seconds.'})
                 
-                if user.password == password:
+                # التعديل: استخدام دالة check_password_hash للتحقق الآمن والمشفر من كلمة المرور
+                if check_password_hash(user.password, password):
                     user.failed_attempts = 0
                     user.lockout_until = None
                     db.session.commit()
@@ -136,7 +138,10 @@ def register():
         if existing_user:
             return jsonify({'status': 'fail', 'message': 'Username already exists!'})
 
-        new_user = User(username=username, password=password)
+        # التعديل: تشفير كلمة المرور فوراً باستخدام خوارزمية scrypt قبل إرسالها للداتابيز
+        hashed_password = generate_password_hash(password, method='scrypt')
+        new_user = User(username=username, password=hashed_password)
+        
         db.session.add(new_user)
         db.session.commit()
         session['username'] = username

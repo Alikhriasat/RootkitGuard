@@ -29,44 +29,25 @@ class User(db.Model):
     password = db.Column(db.String(256), nullable=False)  # ⬅ تم تغييرها هنا من 150 إلى 256
     failed_attempts = db.Column(db.Integer, default=0)
     lockout_until = db.Column(db.DateTime, nullable=True)
-# تحميل موديلات الذكاء الاصطناعي مع حماية كاملة وطباعة تقرير للـ Logs
+# تحميل موديلات الذكاء الاصطناعي الجديدة مع حماية كاملة وطباعة تقرير للـ Logs
 model = None
 vectorizer = None
 
 print("=== STARTING AI MODEL CHECK ===")
 try:
     print(f"Current Working Directory: {os.getcwd()}")
-    if os.path.exists('syscall_model.pkl'):
-        model = joblib.load('syscall_model.pkl')
-        print("✔ 'syscall_model.pkl' LOADED SUCCESSFULLY!")
-    if os.path.exists('vectorizer.pkl'):
-        vectorizer = joblib.load('vectorizer.pkl')
-        print("✔ 'vectorizer.pkl' LOADED SUCCESSFULLY!")
+    # 1. قراءة ملف الموديل الجديد بعد التحديث
+    if os.path.exists('rf_syscall_model.pkl'):
+        model = joblib.load('rf_syscall_model.pkl')
+        print("✔ 'rf_syscall_model.pkl' LOADED SUCCESSFULLY!")
+        
+    # 2. قراءة ملف الـ Vectorizer الجديد بعد التحديث
+    if os.path.exists('rf_vectorizer.pkl'):
+        vectorizer = joblib.load('rf_vectorizer.pkl')
+        print("✔ 'rf_vectorizer.pkl' LOADED SUCCESSFULLY!")
 except Exception as e:
     print(f"Error loading ML models: {e}")
 print("=== END OF AI MODEL CHECK ===")
-
-# قائمة الـ Features الرسمية والنظيفة المأخوذة من صورتك بالظبط لفلترة ملف الـ JSON
-ALLOWED_FEATURES = {
-    '_sysctl', 'accept', 'accept4', 'access', 'acct', 'add_key', 'adjtimex', 'alarm', 
-    'arch_prctl', 'bind', 'bpf', 'brk', 'capget', 'capset', 'chdir', 'chmod', 'chown', 
-    'chroot', 'clock_adjtime', 'clock_getres', 'clock_gettime', 'clock_nanosleep', 
-    'clock_settime', 'clone', 'clone3', 'close', 'close_range', 'connect', 'copy_file_range', 
-    'creat', 'delete_module', 'dup', 'dup2', 'dup3', 'epoll_create', 'epoll_create1', 
-    'epoll_ctl', 'epoll_pwait', 'epoll_pwait2', 'epoll_wait', 'eventfd', 'eventfd2', 
-    'execve', 'execveat', 'exit', 'exit_group', 'faccessat', 'faccessat2', 'fadvise64', 
-    'falloc', 'allocate', 'fanotify_init', 'fanotify_mark', 'fchdir', 'fchmod', 'fchmodat', 
-    'fchown', 'fchownat', 'fcntl', 'fdatasync', 'fgetxattr', 'finit_module', 'flistxattr', 
-    'flock', 'fremovexattr', 'fsetxattr', 'fsmount', 'fsopen', 'fspick', 'fstat', 'fstatfs', 
-    'fsync', 'ftruncate', 'futex', 'futimesat', 'getcwd', 'getdents', 'getdents64', 
-    'getegid', 'geteuid', 'getgid', 'getgroups', 'getitimer', 'getpeername', 'getpgid', 
-    'getpgrp', 'getpid', 'getppid', 'getpriority', 'getrandom', 'getresgid', 'getresuid', 
-    'getrlimit', 'getrusage', 'getsid', 'gettid', 'getsockname', 'getsockopt', 'gettimeofday', 
-    'getuid', 'getxattr', 'inotify_add_watch', 'inotify_init', 'inotify_init1', 'inotify_rm_watch', 
-    'io_cancel', 'io_destroy', 'io_getevents', 'io_setup', 'io_submit', 'io_uring_enter', 
-    'io_uring_register', 'io_uring_setup', 'ioctl', 'ioperm', 'iopl', 'ioprio_get', 'ioprio_set', 
-    'kcmp', 'keyctl', 'kill', 'lchown', 'lgetxattr', 'link', 'linkat'
-}
 
 @app.route('/')
 def home():

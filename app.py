@@ -54,7 +54,7 @@ def clean_sequence(text):
 def home():
     if 'user_id' in session:
         return redirect(url_for('dashboard'))
-    return render_template('login.html')
+    return redirect(url_for('login'))
 
 @app.route('/dashboard')
 def dashboard():
@@ -153,8 +153,14 @@ def register():
     except Exception as e:
         return jsonify({'status': 'error', 'message': f'Database or server error: {str(e)}'}), 500
 
-@app.route('/login', methods=['POST'])
+# التعديل: تم السماح بـ GET لعرض الصفحة أونلاين عند تسجيل الخروج، و POST لمعالجة الفورم
+@app.route('/login', methods=['GET', 'POST'])
 def login():
+    if request.method == 'GET':
+        if 'user_id' in session:
+            return redirect(url_for('dashboard'))
+        return render_template('login.html')
+
     try:
         data = request.get_json() or {}
         username = data.get('username')
@@ -172,9 +178,10 @@ def login():
     except Exception as e:
         return jsonify({'status': 'error', 'message': f'Database or server error: {str(e)}'}), 500
 
-@app.route('/logout')
+# التعديل: تم جعل المسار يستقبل GET و POST لتفادي خطأ المتصفح والـ Render تماماً
+@app.route('/logout', methods=['GET', 'POST'])
 def logout():
-    session.pop('user_id', None)
+    session.clear()
     return redirect(url_for('login'))
 
 if __name__ == '__main__':

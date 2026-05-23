@@ -70,7 +70,6 @@
             outline: none; 
             border-color: #cbd5e1; 
         }
-        /* أيقونة العين داخل حقل الباسوورد */
         .password-toggle {
             position: absolute;
             right: 16px;
@@ -174,7 +173,6 @@ function setMode(mode) {
     }
 }
 
-// دالة إظهار وإخفاء كلمة المرور عند النقر على العين
 function togglePassword() {
     const passwordField = document.getElementById('password');
     const toggleIcon = document.querySelector('.password-toggle');
@@ -200,9 +198,15 @@ document.getElementById('authForm').addEventListener('submit', function(e) {
     const originalBtnText = actionBtn.innerText;
     actionBtn.innerText = "Processing...";
 
+    // تحقق من طول كلمة المرور في الطرف الأمامي أولاً عند التسجيل
+    if (authMode === 'register' && password.length < 6) {
+        errorBox.innerText = "Password must be at least 6 characters long!";
+        actionBtn.innerText = originalBtnText;
+        return;
+    }
+
     const endpoint = authMode === 'login' ? '/login' : '/register';
 
-    // إرسال البيانات الحقيقية للسيرفر لفحص الشروط والـ password
     fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -210,41 +214,28 @@ document.getElementById('authForm').addEventListener('submit', function(e) {
     })
     .then(res => {
         actionBtn.innerText = originalBtnText;
-        if (res.redirected) {
-            window.location.href = res.url;
-            return null;
-        }
         return res.json();
     })
     .then(data => {
-        if (!data) return; 
+        if (!data) return;
         
-        if (data.status === 'success') {
+        if (data.status === 'success' || data.error === undefined && !data.message) {
+            // نجاح العملية الحقيقية والتوجيه للـ Dashboard
             if (authMode === 'register') {
                 errorBox.style.color = "#22c55e"; 
-                errorBox.innerText = data.message + " Redirecting...";
+                errorBox.innerText = "Account created successfully! Redirecting...";
                 setTimeout(() => { window.location.href = '/dashboard'; }, 1500);
             } else {
                 window.location.href = '/dashboard';
             }
         } else {
-            // فحص ذكي: إذا كان الخطأ بسبب السيرفر أو الـ Database نعمل Bypass
-            // أما إذا كان الباسوورد غلط أو الشروط ناقصة، يظهر الخطأ الحقيقي للمستخدم لمنع الدخول العشوائي
-            const errMsg = data.message ? data.message.toLowerCase() : "";
-            if (errMsg.includes("database") || errMsg.includes("operationalerror") || errMsg.includes("connection")) {
-                console.log("Database issue detected, cloud bypass activated.");
-                window.location.href = '/dashboard';
-            } else {
-                // هنا تظهر شروط الـ Password أو الخطأ الحقيقي (مثلاً: الباسوورد قصير أو المستخدم موجود مسبقاً)
-                errorBox.innerText = data.message;
-            }
+            // إظهار الخطأ الحقيقي القادم من السيرفر (مثل: باسوورد خاطئ أو حساب موجود مسبقاً)
+            errorBox.innerText = data.message || "Authentication failed.";
         }
     })
     .catch(err => {
         actionBtn.innerText = originalBtnText;
-        // لا نقوم بعمل bypass مباشر إلا إذا تأكدنا أن السيرفر غير قادر على الاستجابة نهائياً بسبب الـ Database
-        console.log("Fetch catch triggered:", err);
-        window.location.href = '/dashboard';
+        errorBox.innerText = "Server connection issue. Please check again.";
     });
 });
 </script>

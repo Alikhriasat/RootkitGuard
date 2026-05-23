@@ -9,12 +9,13 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your_super_secret_key_here'
+# استخدام قاعدة بيانات احتياطية تلقائياً إذا لم تكن DATABASE_URL متوفرة أو تعمل
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///fallback.db') 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
-# موديل المستخدم الافتراضي لعمليات التسجيل والدخول
+# موديل المستخدم لعمليات التسجيل والدخول الحقيقية
 class User(db.Model):
     __tablename__ = 'user'
     id = db.Column(db.Integer, primary_key=True)
@@ -44,7 +45,7 @@ print("=== END OF AI MODEL CHECK ===")
 def clean_sequence(text):
     text = str(text).lower()
     text = text.replace("|", " ")
-    text = text.replace("sys_", "")  # تنظيف الـ sys_ ليتطابق مع الـ features
+    text = text.replace("sys_", "")  # تنظيف الـ sys_ ليتطابق مع الـ features الأصلية
     text = re.sub(r"[^a-z0-9_ ]", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
     return text
@@ -92,24 +93,19 @@ def detect():
             if not sequence:
                 return jsonify({'error': 'No syscall sequence found in JSON.'}), 400
 
-            # المعالجة الرياضية المتطابقة مع جهازك 100%
             cleaned_sequence = clean_sequence(sequence)
             X = vectorizer.transform([cleaned_sequence])
             X_selected = selector.transform(X)
             
-            # التنبؤ الفعلي من الـ Random Forest
             prediction = model.predict(X_selected)[0]
             pred_raw = str(prediction).lower().strip()
             
-            # --- تعديل العكس المضمون والصحيح للتسميات فقط ---
-            # إذا أخرج الموديل 0 أو normal، نعكسها لتصبح abnormal (مش normal باللون الأحمر)
-            # إذا أخرج الموديل 1 أو abnormal، نعكسها لتصبح normal (سليم باللون الأخضر)
+            # ضبط العكس للتسميات بشكل مستقيم أونلاين
             if pred_raw in ['0', 'normal', 'healthy']:
                 final_pred_str = "abnormal"
             else:
                 final_pred_str = "normal"
             
-            # حساب نسبة الـ Confidence الحقيقية للموديل
             confidence = 100
             try:
                 prob = model.predict_proba(X_selected)
@@ -129,44 +125,52 @@ def detect():
             
     return jsonify({'error': 'Invalid file type.'}), 400
 
-@app.route('/register', methods=['GET', 'POST'])
+@app.route('/register', methods=['POST'])
 def register():
-    if request.method == 'POST':
-        username = request.form.get('username') or (request.get_json().get('username') if request.is_json else None)
-        password = request.form.get('password') or (request.get_json().get('password') if request.is_json else None)
-        try:
-            if User.query.filter_by(username=username).first():
-                return jsonify({'error': 'Username already exists!'}), 400
-            hashed_password = generate_password_hash(password)
-            new_user = User(username=username, password=hashed_password)
-            db.session.add(new_user)
-            db.session.commit()
-            return redirect(url_for('login'))
-        except Exception as e:
-            # في حال حدوث مشكلة بقاعدة البيانات، نتخطاها وندخله مباشرة بحساب تجريبي
-            session['user_id'] = 999
-            return redirect(url_for('dashboard'))
-    return render_template('register.html')
+    try:
+        data = request.get_json() or {}
+        username = data.get('username')
+        password = data.get('password')
 
-@app.route('/login', methods=['GET', 'POST'])
+        if not username or not password:
+            return jsonify({'status': 'error', 'message': 'All fields are required!'}), 400
+
+        # فحص شروط قوة الـ Password برمجياً في السيرفر لضمان الأمان
+        if len(password) < 6:
+            return jsonify({'status': 'error', 'message': 'Password must be at least 6 characters long!'}), 400
+
+        if User.query.filter_by(username=username).first():
+            return jsonify({'status': 'error', 'message': 'Username already exists!'}), 400
+
+        hashed_password = generate_password_hash(password)
+        new_user = User(username=username, password=hashed_password)
+        db.session.add(new_user)
+        db.session.commit()
+        
+        # عند نجاح التسجيل، نقوم بتسجيل الدخول تلقائياً
+        session['user_id'] = new_user.id
+        return jsonify({'status': 'success', 'message': 'Account created successfully!'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': f'Database or server error: {str(e)}'}), 500
+
+@app.route('/login', methods=['POST'])
 def login():
-    if request.method == 'POST':
-        username = request.form.get('username') or (request.get_json().get('username') if request.is_json else None)
-        password = request.form.get('password') or (request.get_json().get('password') if request.is_json else None)
-        try:
-            user = User.query.filter_by(username=username).first()
-            if user and check_password_hash(user.password, password):
-                session['user_id'] = user.id
-                return redirect(url_for('dashboard'))
-            else:
-                # إذا كانت البيانات المدخلة صحيحة كـ Bypass سريع لتخطي عطل السيرفر
-                session['user_id'] = 999
-                return redirect(url_for('dashboard'))
-        except Exception as e:
-            # تخطي أخطاء اتصال الـ Database على ريندر لفتح لوحة التحكم فوراً
-            session['user_id'] = 999
-            return redirect(url_for('dashboard'))
-    return render_template('login.html')
+    try:
+        data = request.get_json() or {}
+        username = data.get('username')
+        password = data.get('password')
+
+        if not username or not password:
+            return jsonify({'status': 'error', 'message': 'All fields are required!'}), 400
+
+        user = User.query.filter_by(username=username).first()
+        if user and check_password_hash(user.password, password):
+            session['user_id'] = user.id
+            return jsonify({'status': 'success'})
+        else:
+            return jsonify({'status': 'error', 'message': 'Invalid username or password!'}), 401
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': f'Database or server error: {str(e)}'}), 500
 
 @app.route('/logout')
 def logout():
@@ -178,5 +182,5 @@ if __name__ == '__main__':
         with app.app_context():
             db.create_all()
     except Exception as e:
-        print(f"Database creation bypassed: {e}")
+        print(f"Database sync skipped: {e}")
     app.run(debug=True)
